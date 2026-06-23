@@ -2,9 +2,26 @@
 const RELATIONS = {mother:"母",father:"父",grandmother:"祖母",grandfather:"祖父",
   partner:"パートナー",friend:"友人",child:"子ども",grandchild:"孫",sibling:"きょうだい",other:"その他"};
 const AGE_BANDS = ["10s","20s","30s","40s","50s","60s","70s","80s"];
-// 予算スライダーの停止点：2000円〜1万円は1000刻み、1万円超は5000刻み
-const BUDGET_STEPS = [2000,3000,4000,5000,6000,7000,8000,9000,10000,15000,20000,25000,30000,35000,40000,45000,50000];
+// 予算スライダーの停止点：2000〜1万円は1000刻み、1万円超は5000刻みで10万まで。
+// 最上段(10万)は「10万円以上＝上限なし」扱い。
+const BUDGET_STEPS = (() => {
+  const a = [];
+  for (let v = 2000; v <= 10000; v += 1000) a.push(v);
+  for (let v = 15000; v <= 100000; v += 5000) a.push(v);
+  return a;
+})();
+const BUDGET_TOP = BUDGET_STEPS.length - 1;       // 10万円＝上限なしの位置
 const BUDGET_DEFAULT = 8000;
+// 非線形配分：大半の人が収まる1万円以下を“広く”取る（低予算に見せない）。
+// 1万円以下の停止点は幅4、1万円超は幅1 → バーの約6割が1万円以下になる。
+const BUDGET_W = BUDGET_STEPS.map(v => v <= 10000 ? 4 : 1);
+const BUDGET_POS = (() => { let acc = 0; return BUDGET_W.map((w, i) => (acc += (i ? w : 0))); })();
+const BUDGET_POS_MAX = BUDGET_POS[BUDGET_POS.length - 1];
+function _posToIdx(p){
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < BUDGET_POS.length; i++){ const d = Math.abs(BUDGET_POS[i] - p); if (d < bd){ bd = d; best = i; } }
+  return best;
+}
 const GENDERS = {female:"女性", male:"男性", other:"その他"};
 // 関係から性別が自明に決まるもの（このとき入力欄は出さない）
 const AUTO_GENDER = {mother:"female", grandmother:"female", father:"male", grandfather:"male"};
@@ -18,6 +35,10 @@ const ONE_TIME_OCCASIONS = ["出産祝い","結婚祝い","新築・引っ越し
 let people = [];
 let selectedPersonId = null;
 let calDate = new Date(); calDate.setDate(1);
+let calMarks = {};               // 表示中の月の {日: [イベント]}
+let isSubscribed = false;        // 有料会員か
+let freeVisible = 2;             // 無料で表示する提案件数
+let freePeopleLimit = 2;         // 無料で登録できる人数
 
 // ===== API =====
 const api = {
@@ -35,7 +56,7 @@ applyTheme(currentTheme());
 function openSettings(){
   const t = currentTheme();
   modal(`
-    <h2>⚙️ 設定</h2>
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("settings",20)} 設定</h2>
     <label>デザイン</label>
     <div class="theme-opts">
       <div class="theme-opt ${t==="light"?"sel":""}" data-theme="light">
@@ -47,21 +68,37 @@ function openSettings(){
         <div><div class="tn">ダーク</div><div class="td">暗い背景＋ゴールドの特別感</div></div>
       </div>
     </div>
+    <label style="margin-top:16px">会員（動作確認用トグル）</label>
+    <div class="theme-opt" id="sub-row">
+      <div class="sw" style="background:linear-gradient(135deg,#cda46a,#b58a48)"></div>
+      <div style="flex:1"><div class="tn">${isSubscribed?"プレミアム会員":"無料会員"}</div>
+        <div class="td">${isSubscribed?"広告なし・無制限・記録/写真OK":`広告あり・${freePeopleLimit}人まで・提案${freeVisible}件まで`}</div></div>
+      <button class="ghost" id="sub-btn" style="margin:0">${isSubscribed?"無料に戻す":"プレミアムにする"}</button>
+    </div>
     <div class="modal-actions"><button class="ghost" onclick="closeModal()">閉じる</button></div>`);
-  document.querySelectorAll(".theme-opt").forEach(el => el.onclick = () => {
+  document.querySelectorAll(".theme-opt[data-theme]").forEach(el => el.onclick = () => {
     const theme = el.dataset.theme;
     localStorage.setItem("theme", theme);
     applyTheme(theme);
-    document.querySelectorAll(".theme-opt").forEach(x => x.classList.remove("sel"));
+    document.querySelectorAll(".theme-opt[data-theme]").forEach(x => x.classList.remove("sel"));
     el.classList.add("sel");
   });
+  document.getElementById("sub-btn").onclick = async () => {
+    await api.post("/api/settings", {subscribed: !isSubscribed});
+    isSubscribed = !isSubscribed;
+    renderAds();
+    await loadPeople();
+    closeModal();
+  };
 }
 
 // ===== 起動 =====
 init();
 async function init(){
-  document.querySelectorAll("[data-icon]").forEach(el => el.innerHTML = icon(el.dataset.icon, 24));
+  document.querySelectorAll("[data-icon]").forEach(el => el.innerHTML = icon(el.dataset.icon, +el.dataset.size || 24));
   document.getElementById("open-settings").onclick = openSettings;
+  const logo = document.querySelector(".appbar .logo");
+  if (logo){ logo.style.cursor = "pointer"; logo.onclick = surpriseGift; }   // 隠しギミック
   setupBudgetRange();
   fillSelect("s-age", AGE_BANDS);
   document.querySelectorAll(".tabbar button").forEach(b =>
@@ -70,12 +107,75 @@ async function init(){
   document.getElementById("s-person").onchange = onSuggestPersonChange;
   document.getElementById("cal-prev").onclick = () => { calDate.setMonth(calDate.getMonth()-1); renderCalendar(); };
   document.getElementById("cal-next").onclick = () => { calDate.setMonth(calDate.getMonth()+1); renderCalendar(); };
+  document.getElementById("cal-prev-year").onclick = () => { calDate.setFullYear(calDate.getFullYear()-1); renderCalendar(); };
+  document.getElementById("cal-next-year").onclick = () => { calDate.setFullYear(calDate.getFullYear()+1); renderCalendar(); };
+  document.getElementById("cal-today").onclick = () => { calDate = new Date(); calDate.setDate(1); renderCalendar(); };
   document.getElementById("pd-add-event").onclick = () => openEventForm();
   document.getElementById("pd-add-occasion").onclick = () => openOccasionForm();
   document.getElementById("pd-edit").onclick = () => openPersonForm(currentPerson());
   document.getElementById("pd-del").onclick = deleteCurrentPerson;
+  await loadSettings();
   await loadPeople();
   await loadReminders();
+}
+
+// ===== 会員状態・広告 =====
+async function loadSettings(){
+  const s = await api.get("/api/settings");
+  isSubscribed = !!s.subscribed;
+  freeVisible = s.free_suggest_visible ?? 2;
+  freePeopleLimit = s.free_people_limit ?? 2;
+  renderAds();
+}
+function renderAds(){
+  document.getElementById("ad-banner").classList.toggle("hidden", isSubscribed);
+}
+async function subscribe(){
+  await api.post("/api/settings", {subscribed: true});
+  isSubscribed = true;
+  renderAds();
+  await loadPeople();
+}
+// 隠しギミック：タイトルタップでランダム1点
+async function surpriseGift(){
+  const c = await api.get("/api/surprise");
+  if (!c || c.detail) return;
+  modal(`
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("sparkle",20)} ひらめきギフト</h2>
+    <div class="gift" style="box-shadow:none;border:1px solid var(--line)">
+      <div class="top-row">
+        <img src="${c.image_url}" alt="" />
+        <div class="body">
+          <span class="type ${c.type==="experience"?"experience":""}">${TYPE_LABEL[c.type]||c.type}</span>
+          <h3>${esc(c.name)}</h3>
+          <div class="reason">${esc(c.reason)}</div>
+          <div class="evi">${(c.evidence||[]).map(e=>`<span>${e}</span>`).join("")}</div>
+          <a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">閉じる</button>
+      <button class="primary" style="margin:0" id="sp-again">もう一回</button>
+    </div>`);
+  document.getElementById("sp-again").onclick = surpriseGift;
+}
+
+function openUpsell(msg){
+  modal(`
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("sparkle",20)} プレミアム</h2>
+    <p class="sub">${esc(msg || "プレミアム会員の機能です。")}</p>
+    <ul style="font-size:13px;color:var(--muted);line-height:2;margin:6px 0">
+      <li>提案をすべて表示（無料は${freeVisible}件まで）</li>
+      <li>相手を無制限に登録（無料は${freePeopleLimit}人まで）</li>
+      <li>あげた／もらったを写真付きで記録</li>
+      <li>広告なし</li>
+    </ul>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">閉じる</button>
+      <button class="primary" style="margin:0" id="up-go">プレミアムにする（体験）</button>
+    </div>`);
+  document.getElementById("up-go").onclick = async () => { await subscribe(); closeModal(); };
 }
 
 // ===== 🔔 リマインド =====
@@ -84,11 +184,12 @@ async function loadReminders(){
   const list = await api.get("/api/reminders");
   if (!list.length){ box.innerHTML = ""; return; }
   box.innerHTML = list.map(r => {
-    const key = r.person_id ? (people.find(p=>p.id===r.person_id)?.icon || "gift")
-                            : (OCCASION_ICON[r.occasion] || "gift");
+    const person = r.person_id ? people.find(p => p.id === r.person_id) : null;
+    const ic = person ? avatarHTML(person, person.photo_url ? 38 : 22)
+                      : icon(OCCASION_ICON[r.occasion] || "gift", 22);
     return `
     <div class="remind ${r.stage}" ${r.person_id?`data-pid="${r.person_id}"`:""}>
-      <div class="ric" style="background:${r.color}22;color:${r.color}">${icon(key,22)}</div>
+      <div class="ric" style="background:${r.color}22;color:${r.color}">${ic}</div>
       <div class="rtext">${esc(r.message)}</div>
       ${r.stage!=="today"?`<div class="rday">あと${r.days}日</div>`:""}
     </div>`;}).join("");
@@ -102,32 +203,37 @@ async function loadReminders(){
 
 function setupBudgetRange(){
   const lo = document.getElementById("s-bmin-r"), hi = document.getElementById("s-bmax-r");
-  const N = BUDGET_STEPS.length - 1;
-  [lo, hi].forEach(s => { s.min = 0; s.max = N; s.step = 1; });
-  lo.value = Math.max(0, BUDGET_STEPS.indexOf(2000));
-  hi.value = Math.max(0, BUDGET_STEPS.indexOf(BUDGET_DEFAULT));
+  [lo, hi].forEach(s => { s.min = 0; s.max = BUDGET_POS_MAX; s.step = 1; });
+  lo.value = BUDGET_POS[BUDGET_STEPS.indexOf(2000)];
+  hi.value = BUDGET_POS[BUDGET_STEPS.indexOf(BUDGET_DEFAULT)];
   const fill = document.getElementById("budget-fill"), label = document.getElementById("budget-label");
   const update = (e) => {
-    let a = +lo.value, b = +hi.value;
-    // 上限は下限を下回らない。下限を上げたら上限も連れて上がる。
-    if (e && e.target === lo && a > b){ hi.value = a; b = a; }
-    if (e && e.target === hi && b < a){ hi.value = a; b = a; }
-    label.textContent = `${BUDGET_STEPS[a].toLocaleString()}円 〜 ${BUDGET_STEPS[b].toLocaleString()}円`;
-    fill.style.left = (a / N * 100) + "%";
-    fill.style.width = ((b - a) / N * 100) + "%";
+    let ai = _posToIdx(+lo.value), bi = _posToIdx(+hi.value);
+    if (e && e.target === lo && ai > bi) bi = ai;          // 上限は下限を下回らない
+    if (e && e.target === hi && bi < ai) bi = ai;
+    lo.value = BUDGET_POS[ai]; hi.value = BUDGET_POS[bi];  // 停止点にスナップ
+    const hiLabel = bi === BUDGET_TOP ? `${BUDGET_STEPS[BUDGET_TOP].toLocaleString()}円以上`
+                                      : `${BUDGET_STEPS[bi].toLocaleString()}円`;
+    label.textContent = `${BUDGET_STEPS[ai].toLocaleString()}円 〜 ${hiLabel}`;
+    const pa = BUDGET_POS[ai] / BUDGET_POS_MAX * 100, pb = BUDGET_POS[bi] / BUDGET_POS_MAX * 100;
+    fill.style.left = pa + "%"; fill.style.width = (pb - pa) + "%";
   };
   lo.oninput = update; hi.oninput = update;
   update();
 }
-function budgetMin(){ return BUDGET_STEPS[+document.getElementById("s-bmin-r").value]; }
-function budgetMax(){ return BUDGET_STEPS[+document.getElementById("s-bmax-r").value]; }
+function _curIdx(id){ return _posToIdx(+document.getElementById(id).value); }
+function budgetMin(){ return BUDGET_STEPS[_curIdx("s-bmin-r")]; }
+function budgetMax(){
+  const i = _curIdx("s-bmax-r");
+  return i === BUDGET_TOP ? 99999999 : BUDGET_STEPS[i];    // 最上段＝上限なし
+}
 function setBudgetMax(v){
   let idx = BUDGET_STEPS.findIndex(x => x >= v);
-  if (idx < 0) idx = BUDGET_STEPS.length - 1;
-  const lo = +document.getElementById("s-bmin-r").value;
-  if (idx < lo) idx = lo;
+  if (idx < 0) idx = BUDGET_TOP;
+  const loIdx = _curIdx("s-bmin-r");
+  if (idx < loIdx) idx = loIdx;
   const hi = document.getElementById("s-bmax-r");
-  hi.value = idx; hi.dispatchEvent(new Event("input"));
+  hi.value = BUDGET_POS[idx]; hi.dispatchEvent(new Event("input"));
 }
 
 function fillSelect(id, arr, labelFn){
@@ -155,7 +261,7 @@ function switchView(v){
 function renderSuggestPersonSelect(){
   const el = document.getElementById("s-person");
   el.innerHTML = `<option value="">（指定なし・フォーム入力）</option>` +
-    people.map(p => `<option value="${p.id}">${p.icon} ${p.name}（${RELATIONS[p.relation]||p.relation}）</option>`).join("");
+    people.map(p => `<option value="${p.id}">${displayName(p)}（${RELATIONS[p.relation]||p.relation}）</option>`).join("");
   if (selectedPersonId) el.value = selectedPersonId;
 }
 function onSuggestPersonChange(){
@@ -177,7 +283,20 @@ async function runSuggest(){
   };
   try{
     const data = await api.post("/api/suggest", body);
+    // 無料の1日上限：コストを使わず即・アップセル
+    if (data.limited){
+      status.innerHTML = `
+        <div class="panel" style="text-align:center">
+          <div style="font-weight:700">${esc(data.limit_message)}</div>
+          <button class="primary" id="lim-go" style="margin-top:12px">プレミアムにする</button>
+        </div>`;
+      document.getElementById("lim-go").onclick = () => openUpsell("回数制限なしで使えます。");
+      return;
+    }
     let notes = "";
+    if (data.remaining_today !== null && data.remaining_today !== undefined){
+      notes += `<p class="sub" style="margin:0 0 8px">今日の無料提案：あと${data.remaining_today}回</p>`;
+    }
     if (data.relax_note){
       notes += `<div class="note" style="display:flex;align-items:center;gap:7px;background:var(--surface);color:var(--muted)">${icon("bulb",16)}<span>${esc(data.relax_note)}</span></div>`;
     }
@@ -202,13 +321,15 @@ async function runSuggest(){
         runSuggest();
       };
     }
+    const locKed = !data.subscribed ? (data.free_visible ?? freeVisible) : Infinity;
     (data.cards||[]).forEach((c, idx) => {
       const evi = (c.evidence||[]).map(e => `<span>${e}</span>`).join("");
       const isTop = idx === 0;
       const typeCls = c.type === "experience" ? "experience" : "";
+      const locked = idx >= locKed;
       results.insertAdjacentHTML("beforeend", `
-        <div class="gift ${isTop?"top":""}">
-          ${isTop?`<span class="rank">★ イチオシ</span>`:""}
+        <div class="gift ${isTop?"top":""} ${locked?"locked":""}">
+          ${isTop && !locked?`<span class="rank">★ イチオシ</span>`:""}
           <div class="top-row">
             <img src="${c.image_url}" alt="" />
             <div class="body">
@@ -219,8 +340,11 @@ async function runSuggest(){
               <a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a>
             </div>
           </div>
+          ${locked?`<div class="lock-ov"><div class="lock-msg">${icon("sparkle",16)}プレミアムで全部見る</div><button class="ghost up-btn">プレミアムにする</button></div>`:""}
         </div>`);
     });
+    results.querySelectorAll(".up-btn").forEach(b =>
+      b.onclick = () => openUpsell(`提案は無料だと${data.free_visible ?? freeVisible}件まで。続きはプレミアムで。`));
     // 手作りは商品提案しない → 別導線（儲けゼロ・一緒に考える）
     results.insertAdjacentHTML("beforeend", `
       <div class="panel" style="text-align:center">
@@ -236,7 +360,7 @@ async function runSuggest(){
 // ===== 🎨 手作り（商品提案しない / 一緒に考える） =====
 function openHandmade(){
   modal(`
-    <h2>🎨 手作りで贈る</h2>
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("palette",20)} 手作りで贈る</h2>
     <p class="sub">商品は出しません。一緒に“何を作るか”から考えましょう。</p>
     <label>作りたいもの（決まっていれば）</label>
     <input id="hm-want" placeholder="例：フォトブック（空欄なら一緒に考えます）" />
@@ -289,32 +413,47 @@ function renderPeopleGrid(){
   const grid = document.getElementById("people-grid");
   grid.innerHTML = people.map(p => `
     <div class="person ${p.id===selectedPersonId?'sel':''}" data-id="${p.id}">
-      <div class="avatar" style="background:${p.color}22;color:${p.color}">${icon(p.icon,36)}</div>
-      <div class="name">${esc(p.name)}</div>
+      <div class="avatar" style="background:${p.color}22;color:${p.color}">${avatarHTML(p,p.photo_url?56:36)}</div>
+      <div class="name">${esc(displayName(p))}</div>
       <div class="meta">${RELATIONS[p.relation]||p.relation}・${p.age_band}</div>
-      <div class="meta">${[p.birthday?("🎂"+fmtMD(p.birthday)):"", p.anniversary?("💕"+fmtMD(p.anniversary)):""].filter(Boolean).join(" ")}</div>
+      <div class="meta">${[
+        p.birthday?`<span style="display:inline-flex;align-items:center;gap:2px">${icon("birthday",12)}${fmtMD(p.birthday)}</span>`:"",
+        p.anniversary?`<span style="display:inline-flex;align-items:center;gap:2px">${icon("heart",12)}${fmtMD(p.anniversary)}</span>`:""
+      ].filter(Boolean).join(" ")}</div>
     </div>`).join("") +
     `<div class="add-person" id="add-person">＋ 人を登録</div>`;
   grid.querySelectorAll(".person").forEach(el =>
     el.onclick = () => selectPerson(el.dataset.id));
-  document.getElementById("add-person").onclick = () => openPersonForm(null);
+  document.getElementById("add-person").onclick = () => {
+    if (!isSubscribed && people.length >= freePeopleLimit){
+      openUpsell(`無料会員は${freePeopleLimit}人まで。プレミアムで無制限に登録できます。`); return;
+    }
+    openPersonForm(null);
+  };
 }
 
 function currentPerson(){ return people.find(p => p.id === selectedPersonId); }
+// 名前が未入力なら関係名（「母」など）で成り立たせる
+function displayName(p){ return (p.name && p.name.trim()) || RELATIONS[p.relation] || "相手"; }
+// 顔写真があれば写真、無ければアイコン（顔写真は無料機能）
+function avatarHTML(p, size){
+  if (p.photo_url) return `<img src="${p.photo_url}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;display:block" />`;
+  return icon(p.icon, size);
+}
 
 async function selectPerson(id){
   selectedPersonId = id;
   renderPeopleGrid();
   const p = currentPerson();
   document.getElementById("person-detail").classList.remove("hidden");
-  document.getElementById("pd-avatar").innerHTML = icon(p.icon, 32);
+  document.getElementById("pd-avatar").innerHTML = avatarHTML(p, p.photo_url?48:32);
   document.getElementById("pd-avatar").style.background = p.color+"22";
   document.getElementById("pd-avatar").style.color = p.color;
-  document.getElementById("pd-name").textContent = p.name;
+  document.getElementById("pd-name").textContent = displayName(p);
   document.getElementById("pd-meta").textContent =
     `${RELATIONS[p.relation]||p.relation}・${p.age_band}`
-    + (p.birthday?("・🎂"+fmtMD(p.birthday)):"")
-    + (p.anniversary?("・💕"+fmtMD(p.anniversary)):"")
+    + (p.birthday?("・誕生日"+fmtMD(p.birthday)):"")
+    + (p.anniversary?("・記念日"+fmtMD(p.anniversary)):"")
     + (p.notes?`　／　${p.notes}`:"");
   await renderOccasions();
   await renderEvents();
@@ -338,7 +477,7 @@ async function renderOccasions(){
 
 function openOccasionForm(){
   modal(`
-    <h2>🗓 予定を追加</h2>
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("calendar",20)} 予定を追加</h2>
     <p class="sub">出産祝いなどの一回きりの予定。選択肢から選べます（自由入力は「その他」）。</p>
     <label>種類</label>
     <select id="oc-label">${ONE_TIME_OCCASIONS.map(o=>`<option>${o}</option>`).join("")}</select>
@@ -375,6 +514,7 @@ async function renderEvents(){
   if (!events.length){ box.innerHTML = `<p class="loading">まだ記録がありません。</p>`; return; }
   box.innerHTML = events.map(e => `
     <div class="event">
+      ${e.photo_url?`<img class="ev-thumb" src="${e.photo_url}" alt="" />`:""}
       <span class="dir ${e.direction}">${e.direction==="gave"?"あげた":"もらった"}</span>
       <span class="t">${esc(e.title)}${e.category?`<span class="d">（${esc(e.category)}）</span>`:""}</span>
       <span class="d">${e.date||""}</span>
@@ -385,7 +525,7 @@ async function renderEvents(){
 }
 
 async function deleteCurrentPerson(){
-  if (!confirm(`${currentPerson().name} を削除しますか？（贈答記録も消えます）`)) return;
+  if (!confirm(`${displayName(currentPerson())} を削除しますか？（贈答記録も消えます）`)) return;
   await api.del("/api/people/"+selectedPersonId);
   selectedPersonId = null;
   document.getElementById("person-detail").classList.add("hidden");
@@ -404,7 +544,7 @@ function openPersonForm(p){
   const e = p || {icon:"person",color:COLORS[0],age_band:"60s",relation:"mother"};
   modal(`
     <h2>${p?"相手を編集":"相手を登録"}</h2>
-    <label>名前</label><input id="f-name" value="${esc(e.name||"")}" placeholder="お母さん" />
+    <label>名前（任意）</label><input id="f-name" value="${esc(e.name||"")}" placeholder="未入力でOK（「母」などで表示）" />
     <div class="row">
       <div><label>関係</label><select id="f-rel">${Object.entries(RELATIONS).map(([k,v])=>`<option value="${k}" ${k===e.relation?"selected":""}>${v}</option>`).join("")}</select></div>
       <div><label>年代</label><select id="f-age">${AGE_BANDS.map(a=>`<option ${a===e.age_band?"selected":""}>${a}</option>`).join("")}</select></div>
@@ -420,7 +560,10 @@ function openPersonForm(p){
       <div><label>誕生日</label><input id="f-bday" type="date" value="${e.birthday||""}" /></div>
       <div><label>記念日（結婚・交際など）</label><input id="f-anniv" type="date" value="${e.anniversary||""}" /></div>
     </div>
-    <label>アイコン</label>
+    <label>顔写真（任意・無料）</label>
+    <input class="ev-photo-input" id="f-photo" type="file" accept="image/*" />
+    <div id="f-photo-preview">${e.photo_url?`<img src="${e.photo_url}" style="margin-top:8px;width:72px;height:72px;border-radius:50%;object-fit:cover" />`:""}</div>
+    <label style="margin-top:8px">アイコン（写真が無い時に表示）</label>
     <div class="icon-pick" id="f-icons">${ICONS.map(i=>`<span class="${i===e.icon?"sel":""}" data-i="${i}">${icon(i,22)}</span>`).join("")}</div>
     <label>色</label>
     <div class="color-pick" id="f-colors">${COLORS.map(c=>`<span class="${c===e.color?"sel":""}" data-c="${c}" style="background:${c}"></span>`).join("")}</div>
@@ -441,7 +584,15 @@ function openPersonForm(p){
   document.getElementById("f-rel").onchange = toggleGender;
   toggleGender();
 
-  let icon=e.icon, color=e.color;
+  let icon=e.icon, color=e.color, photoData=e.photo_url||"";
+  document.getElementById("f-photo").onchange = (ev) => {
+    const f = ev.target.files[0]; if (!f) return;
+    resizeImage(f, 512, (d) => {
+      photoData = d;
+      document.getElementById("f-photo-preview").innerHTML =
+        `<img src="${d}" style="margin-top:8px;width:72px;height:72px;border-radius:50%;object-fit:cover" />`;
+    });
+  };
   document.querySelectorAll("#f-icons span").forEach(s => s.onclick = () => {
     icon=s.dataset.i; document.querySelectorAll("#f-icons span").forEach(x=>x.classList.remove("sel")); s.classList.add("sel");
   });
@@ -449,8 +600,7 @@ function openPersonForm(p){
     color=s.dataset.c; document.querySelectorAll("#f-colors span").forEach(x=>x.classList.remove("sel")); s.classList.add("sel");
   });
   document.getElementById("f-save").onclick = async () => {
-    const name = document.getElementById("f-name").value.trim();
-    if (!name){ alert("名前を入れてください"); return; }
+    const name = document.getElementById("f-name").value.trim();   // 任意（空でOK）
     const rel = document.getElementById("f-rel").value;
     const gender = AUTO_GENDER[rel] || document.getElementById("f-gender").value;
     if (!gender){ alert("性別を選んでください"); return; }
@@ -460,12 +610,13 @@ function openPersonForm(p){
       age_band: document.getElementById("f-age").value,
       birthday: document.getElementById("f-bday").value,
       anniversary: document.getElementById("f-anniv").value,
-      icon, color,
+      icon, color, photo_url: photoData,
       notes: document.getElementById("f-notes").value,
       avoid: splitCsv(document.getElementById("f-avoid").value),
       likes: e.likes||[],
     };
     const saved = await api.post("/api/people", body);
+    if (saved && saved.detail){ openUpsell(saved.detail); return; }   // 上限などはアップセル
     closeModal();
     selectedPersonId = saved.id;
     await loadPeople();
@@ -474,8 +625,13 @@ function openPersonForm(p){
 }
 
 function openEventForm(){
+  if (!isSubscribed){     // 記録は有料会員のみ
+    openUpsell("「あげた／もらった」を写真付きで記録できるのはプレミアム会員です。記録するほど提案が当たります。");
+    return;
+  }
+  let photoData = "";     // 縮小後の data URL
   modal(`
-    <h2>🎁 贈答を記録</h2>
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("gift",20)} 贈答を記録</h2>
     <div class="row">
       <div><label>どっち？</label>
         <select id="ev-dir"><option value="gave">あげた</option><option value="received">もらった</option></select></div>
@@ -487,14 +643,25 @@ function openEventForm(){
       <div><label>価格（任意）</label><input id="ev-price" type="number" placeholder="4800" /></div>
     </div>
     <label>反応・メモ（任意）</label><input id="ev-react" placeholder="すごく喜んでた" />
+    <label>写真（任意）</label>
+    <input class="ev-photo-input" id="ev-photo" type="file" accept="image/*" />
+    <div id="ev-preview"></div>
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">キャンセル</button>
       <button class="primary" style="margin:0" id="ev-save">保存</button>
     </div>`);
+  document.getElementById("ev-photo").onchange = (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    resizeImage(file, 640, (dataUrl) => {
+      photoData = dataUrl;
+      document.getElementById("ev-preview").innerHTML = `<img src="${dataUrl}" alt="プレビュー" />`;
+    });
+  };
   document.getElementById("ev-save").onclick = async () => {
     const title = document.getElementById("ev-title").value.trim();
     if (!title){ alert("品名を入れてください"); return; }
-    await api.post("/api/events", {
+    const res = await api.post("/api/events", {
       person_id: selectedPersonId,
       direction: document.getElementById("ev-dir").value,
       title,
@@ -502,45 +669,111 @@ function openEventForm(){
       price: Number(document.getElementById("ev-price").value)||0,
       reaction: document.getElementById("ev-react").value,
       date: document.getElementById("ev-date").value,
+      photo_url: photoData,
     });
+    if (res && res.detail){ openUpsell(res.detail); return; }
     closeModal();
     renderEvents();
   };
+}
+
+// 写真をクライアントで縮小して data URL に（store.json肥大を防ぐ）
+function resizeImage(file, max, cb){
+  const fr = new FileReader();
+  fr.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      cb(c.toDataURL("image/jpeg", 0.8));
+    };
+    img.src = fr.result;
+  };
+  fr.readAsDataURL(file);
 }
 
 // ===== 📅 カレンダー =====
 async function renderCalendar(){
   const y = calDate.getFullYear(), m = calDate.getMonth();
   document.getElementById("cal-title").textContent = `${y}年 ${m+1}月`;
-  const allEvents = await api.get("/api/events");
+  const marksList = await api.get(`/api/calendar?y=${y}&m=${m+1}`);   // 当月の全イベント
+  const byDay = {};
+  marksList.forEach(mk => (byDay[mk.day] = byDay[mk.day] || []).push(mk));
+  calMarks = byDay;
   const first = new Date(y, m, 1).getDay();
   const days = new Date(y, m+1, 0).getDate();
   const today = new Date();
   const dows = ["日","月","火","水","木","金","土"];
-  let html = dows.map(d => `<div class="dow">${d}</div>`).join("");
+  const hol = getHolidays(y);
+  let html = dows.map((d, i) => `<div class="dow ${i===0?'sun':i===6?'sat':''}">${d}</div>`).join("");
   for (let i=0;i<first;i++) html += `<div class="cell empty"></div>`;
   for (let d=1; d<=days; d++){
-    const md = `${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    const iso = `${y}-${md}`;
-    const bdayPeople = people.filter(p => p.birthday && fmtMD(p.birthday) === pretty(md));
-    const annivPeople = people.filter(p => p.anniversary && fmtMD(p.anniversary) === pretty(md));
-    const hasGift = allEvents.some(e => e.date === iso);
+    const wd = new Date(y, m, d).getDay();
+    const holName = hol[`${m+1}-${d}`];
     const isToday = today.getFullYear()===y && today.getMonth()===m && today.getDate()===d;
-    const marks = bdayPeople.map(p =>
-      `<span class="bday" style="background:${p.color}22;color:${p.color}" data-pid="${p.id}" title="${p.name}の誕生日">${icon(p.icon,16)}</span>`).join("")
-      + annivPeople.map(p =>
-      `<span class="bday" style="background:#f0ddd2;color:#c25a3c" data-pid="${p.id}" title="${p.name}との記念日">${icon("heart",15)}</span>`).join("")
-      + (hasGift?`<span class="gift-dot" style="color:var(--muted)">${icon("gift",14)}</span>`:"");
-    html += `<div class="cell ${isToday?'today':''}"><span class="num">${d}</span><div class="marks">${marks}</div></div>`;
+    const marks = (byDay[d] || []).map(markHTML).join("");
+    const cls = [isToday?'today':'', wd===0?'sun':'', wd===6?'sat':'', holName?'holiday':''].filter(Boolean).join(' ');
+    html += `<div class="cell ${cls}" data-day="${d}"><span class="num">${d}</span>`
+      + (holName?`<span class="hol-name" title="${holName}">${holName}</span>`:"")
+      + `<div class="marks">${marks}</div></div>`;
   }
   const grid = document.getElementById("cal-grid");
   grid.innerHTML = html;
-  grid.querySelectorAll(".bday[data-pid]").forEach(el => el.onclick = () => {
-    selectedPersonId = el.dataset.pid;
-    switchView("suggest");
-    renderSuggestPersonSelect();
-    onSuggestPersonChange();
+  grid.querySelectorAll(".cell[data-day]").forEach(el =>
+    el.onclick = () => openDayModal(y, m, +el.dataset.day));   // 日タップ→メモ／提案
+}
+
+// 日付タップ：イベントがある日は「提案」と「メモ」を両方選べる
+async function openDayModal(y, m, d){
+  const dateStr = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const evs = (calMarks[d] || []).filter(x => x.kind !== "memo");
+  const mm = await api.get("/api/memos?date=" + dateStr);
+  const persons = [...new Set(evs.filter(e => e.person_id).map(e => e.person_id))]
+    .map(id => people.find(p => p.id === id)).filter(Boolean);
+  const evList = evs.length
+    ? `<div style="margin:4px 0 10px;font-size:13px;line-height:1.8">${evs.map(e =>
+        "・" + esc((e.person_id ? displayName(people.find(p=>p.id===e.person_id)) + "：" : "") + e.label)).join("<br>")}</div>`
+    : `<p class="sub" style="margin:4px 0 10px">この日の予定はありません。</p>`;
+  const suggestBtns = persons.map(p =>
+    `<button class="ghost dm-suggest" data-pid="${p.id}" style="width:100%;margin-top:8px">${esc(displayName(p))}への提案を見る</button>`).join("");
+  modal(`
+    <h2>${y}年${m+1}月${d}日</h2>
+    ${evList}
+    ${suggestBtns}
+    <label style="margin-top:12px">メモ</label>
+    <textarea id="dm-memo" placeholder="この日のメモ（買うもの・アイデアなど）">${esc(mm.text||"")}</textarea>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">閉じる</button>
+      <button class="primary" style="margin:0" id="dm-save">メモを保存</button>
+    </div>`);
+  document.querySelectorAll(".dm-suggest").forEach(b => b.onclick = () => {
+    selectedPersonId = b.dataset.pid;
+    closeModal(); switchView("suggest"); renderSuggestPersonSelect(); onSuggestPersonChange();
   });
+  document.getElementById("dm-save").onclick = async () => {
+    await api.post("/api/memos", {date: dateStr, text: document.getElementById("dm-memo").value});
+    closeModal(); renderCalendar();
+  };
+}
+
+// カレンダーの1イベントを描画
+function markHTML(mk){
+  const p = mk.person_id ? people.find(x => x.id === mk.person_id) : null;
+  const pid = p ? `data-pid="${p.id}"` : "";
+  if (mk.kind === "birthday" && p)
+    return `<span class="bday" style="background:${p.color}22;color:${p.color}" ${pid} title="${esc(displayName(p))}の誕生日">${avatarHTML(p, p.photo_url?24:16)}</span>`;
+  if (mk.kind === "anniversary")
+    return `<span class="bday" style="background:#f0ddd2;color:#c25a3c" ${pid} title="${esc((p?displayName(p):"")+"との記念日")}">${icon("heart",15)}</span>`;
+  if (mk.kind === "gift")
+    return `<span class="gift-dot" title="${esc(mk.label)}">${icon("gift",14)}</span>`;
+  if (mk.kind === "memo")
+    return `<span class="cal-occ" title="メモ" style="background:var(--surface);color:var(--muted)">${icon("memo",14)}</span>`;
+  // occasion（母の日・行事・カスタム予定・入学/成人 など）
+  const key = OCCASION_ICON[mk.label] || "gift";
+  const title = (p ? displayName(p) + "：" : "") + mk.label;
+  return `<span class="cal-occ" ${pid} title="${esc(title)}">${icon(key,15)}</span>`;
 }
 
 // ===== ユーティリティ =====

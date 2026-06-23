@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from ..models import resolve_gender
+from ..models import display_name, resolve_gender
 
 # --- 段階のしきい値（日数） ---
 NOTICE_MAX = 35          # これ以内で「お知らせ(約1か月前)」
@@ -177,7 +177,7 @@ def upcoming(people: list[dict], today: date, occasions: list[dict] | None = Non
         stage = _stage(days)
         if stage is None:
             return
-        who = person["name"] if person else ""
+        who = display_name(person) if person else ""
         out.append({
             "occasion": occasion,
             "date": d.isoformat(),
@@ -227,4 +227,62 @@ def upcoming(people: list[dict], today: date, occasions: list[dict] | None = Non
     add(_next_md(12, 1, today), "お歳暮", None)
 
     out.sort(key=lambda r: r["days"])
+    return out
+
+
+def _safe_date(y: int, m: int, d: int) -> date:
+    try:
+        return date(y, m, d)
+    except ValueError:
+        return date(y, m, 28)
+
+
+def month_events(people: list[dict], occasions: list[dict], gift_events: list[dict],
+                 year: int, month: int, memos: dict | None = None) -> list[dict]:
+    """カレンダー表示用：指定年月に起きる“すべての”イベントを返す（通知窓は無関係）。"""
+    out: list[dict] = []
+
+    def emit(d: date | None, kind: str, label: str, person: dict | None = None):
+        if d and d.year == year and d.month == month:
+            out.append({"day": d.day, "kind": kind, "label": label,
+                        "person_id": person["id"] if person else None})
+
+    for p in people:
+        md = _parse_md(p.get("birthday", ""))
+        if md:
+            emit(_safe_date(year, md[0], md[1]), "birthday", "誕生日", p)
+        amd = _parse_md(p.get("anniversary", ""))
+        if amd:
+            emit(_safe_date(year, amd[0], amd[1]), "anniversary", "記念日", p)
+        rel = p.get("relation")
+        if rel == "mother":
+            emit(_mothers_day(year), "occasion", "母の日", p)
+        if rel == "father":
+            emit(_fathers_day(year), "occasion", "父の日", p)
+        if rel in ("grandmother", "grandfather"):
+            emit(_keiro_day(year), "occasion", "敬老の日", p)
+        if rel == "partner":
+            emit(_safe_date(year, 2, 14), "occasion", "バレンタイン", p)
+            emit(_safe_date(year, 3, 14), "occasion", "ホワイトデー", p)
+        if rel in ("child", "grandchild"):
+            bd = _full_date(p.get("birthday", ""))
+            if bd:
+                for occ, d in child_milestones(bd, resolve_gender(rel, p.get("gender", ""))):
+                    emit(d, "occasion", occ, p)
+
+    emit(_safe_date(year, 12, 25), "occasion", "クリスマス")
+    emit(_safe_date(year, 7, 1), "occasion", "お中元")
+    emit(_safe_date(year, 12, 1), "occasion", "お歳暮")
+
+    pmap = {p["id"]: p for p in people}
+    for o in occasions:
+        emit(_full_date(o.get("date", "")), "occasion", o.get("label", "予定"),
+             pmap.get(o.get("person_id")))
+    for e in gift_events:
+        verb = "あげた" if e.get("direction") == "gave" else "もらった"
+        emit(_full_date(e.get("date", "")), "gift", f"{verb}：{e.get('title','')}",
+             pmap.get(e.get("person_id")))
+    for ds, text in (memos or {}).items():
+        if text:
+            emit(_full_date(ds), "memo", "メモ")
     return out

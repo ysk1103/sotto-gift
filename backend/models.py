@@ -16,6 +16,19 @@ RELATION_GENDER = {
     "father": "male", "grandfather": "male",
 }
 
+# 関係の日本語ラベル（名前が未入力のとき表示名に使う）
+RELATION_LABEL = {
+    "mother": "母", "father": "父", "grandmother": "祖母", "grandfather": "祖父",
+    "partner": "パートナー", "friend": "友人", "child": "子ども", "grandchild": "孫",
+    "sibling": "きょうだい", "other": "相手",
+}
+
+
+def display_name(person: dict) -> str:
+    """名前が無ければ関係名（「母」等）で成り立たせる。"""
+    name = (person.get("name") or "").strip()
+    return name or RELATION_LABEL.get(person.get("relation", ""), "相手")
+
 
 def resolve_gender(relation: str, gender: str = "") -> str:
     """明示の性別があればそれを、無ければ関係から推定する。"""
@@ -81,7 +94,8 @@ class Person:
     birthday: str = ""              # "MM-DD" or "YYYY-MM-DD"（年は任意）
     anniversary: str = ""           # 記念日（結婚・交際など）"MM-DD" or "YYYY-MM-DD"
     age_band: str = "60s"
-    icon: str = "🎁"               # 絵文字アバター（写真は Phase2）
+    icon: str = "🎁"               # アバターのアイコンキー（写真が無い時に表示）
+    photo_url: str = ""            # 顔写真（data URL）。あれば優先表示・プレミアム特典
     color: str = "#e8638c"
     notes: str = ""                # 自由記述（RecipientProfile.free_text の素）
     likes: list[str] = field(default_factory=list)
@@ -100,7 +114,7 @@ class GiftEvent:
     source_url: str = ""
     reaction: str = ""             # 喜ばれ度合い・メモ（gave のとき）
     date: str = ""                 # "YYYY-MM-DD"
-    # photo_url は Phase2（席のみ・未実装）
+    photo_url: str = ""            # 写真（data URL）。記録は有料会員のみ
 
 
 # --- ④ 語り層の出力：提案カード1枚 ---

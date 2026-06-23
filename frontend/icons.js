@@ -42,6 +42,7 @@ const SVG_ICON_PATHS = {
   cake: `<line x1="3.5" y1="20.5" x2="20.5" y2="20.5"/><path d="M5.5 20.5v-7c0-1 .8-1.8 1.8-1.8h9.4c1 0 1.8.8 1.8 1.8v7"/><path d="M5.5 15c1.3 1.3 2.8 1.3 4 0s2.8-1.3 4 0 2.8 1.3 4 0"/><line x1="12" y1="7" x2="12" y2="11"/>`,
   cat: `<path d="M5 9 6 4.5l3.4 2.4a7 7 0 0 1 5.2 0L18 4.5 19 9"/><path d="M5 9.5v2a7 7 0 0 0 14 0v-2"/><circle cx="9.6" cy="12" r=".6" fill="currentColor" stroke="none"/><circle cx="14.4" cy="12" r=".6" fill="currentColor" stroke="none"/><path d="M11 14.5h2M12 14.5v1.2"/>`,
   star: `<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/>`,
+  memo: `<path d="M5 19.5h4l9.5-9.5-4-4L5 15.5z"/><path d="M14 6l4 4"/>`,
 };
 
 // 行事ラベル → アイコンキー

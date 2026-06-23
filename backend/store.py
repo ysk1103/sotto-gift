@@ -24,6 +24,10 @@ def _load() -> dict:
     data.setdefault("people", [])
     data.setdefault("events", [])
     data.setdefault("occasions", [])
+    data.setdefault("shown", {})       # {person_id: [過去に提案した品名, ...]（新しい順）}
+    data.setdefault("settings", {"subscribed": False})   # 有料サブスク状態（暫定フラグ）
+    data.setdefault("usage", {"date": "", "count": 0})    # 無料の1日提案回数（コスト防衛）
+    data.setdefault("memos", {})       # {"YYYY-MM-DD": メモ本文}
     return data
 
 
@@ -69,6 +73,7 @@ def delete_person(pid: str) -> None:
         data["people"] = [p for p in data["people"] if p["id"] != pid]
         data["events"] = [e for e in data["events"] if e["person_id"] != pid]
         data["occasions"] = [o for o in data["occasions"] if o["person_id"] != pid]
+        data.get("shown", {}).pop(pid, None)
         _save(data)
 
 
@@ -125,4 +130,67 @@ def delete_occasion(oid: str) -> None:
     with _lock:
         data = _load()
         data["occasions"] = [o for o in data["occasions"] if o["id"] != oid]
+        _save(data)
+
+
+# ---------- 提案済み履歴（「またこれ？」防止のローテーション用） ----------
+def get_shown(person_id: str) -> list[str]:
+    return _load().get("shown", {}).get(person_id, [])
+
+
+def push_shown(person_id: str, titles: list[str], cap: int = 24) -> None:
+    """提案した品名を新しい順で記録（重複は最新を残す・上限cap）。"""
+    with _lock:
+        data = _load()
+        d = data.setdefault("shown", {})
+        d[person_id] = list(dict.fromkeys(list(titles) + d.get(person_id, [])))[:cap]
+        _save(data)
+
+
+# ---------- 設定（会員状態など） ----------
+def get_settings() -> dict:
+    return _load()["settings"]
+
+
+def set_subscribed(value: bool) -> dict:
+    with _lock:
+        data = _load()
+        data["settings"]["subscribed"] = bool(value)
+        _save(data)
+        return data["settings"]
+
+
+# ---------- 無料の1日提案回数（API破産防止） ----------
+def get_usage_count(today: str) -> int:
+    u = _load()["usage"]
+    return u.get("count", 0) if u.get("date") == today else 0
+
+
+def bump_usage(today: str) -> int:
+    with _lock:
+        data = _load()
+        u = data["usage"]
+        if u.get("date") != today:
+            u["date"] = today; u["count"] = 0
+        u["count"] += 1
+        _save(data)
+        return u["count"]
+
+
+# ---------- 日付メモ ----------
+def get_memos() -> dict:
+    return _load()["memos"]
+
+
+def get_memo(date: str) -> str:
+    return _load()["memos"].get(date, "")
+
+
+def set_memo(date: str, text: str) -> None:
+    with _lock:
+        data = _load()
+        if text.strip():
+            data["memos"][date] = text
+        else:
+            data["memos"].pop(date, None)
         _save(data)

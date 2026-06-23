@@ -13,15 +13,21 @@
   <header class="appbar">
     <span class="logo">おくりもの</span>
     <span class="tagline">迷わず、確信を持って</span>
-    <button class="gear" id="open-settings" data-icon="settings" aria-label="設定" title="設定"></button>
+    <button class="gear" id="open-settings" data-icon="settings" data-size="24" aria-label="設定" title="設定"></button>
   </header>
+
+  <!-- 広告（無料会員のみ表示） -->
+  <div id="ad-banner" class="ad hidden">
+    <span class="ad-tag">広告</span>
+    <span>スポンサー枠 ─ プレミアムで広告を非表示にできます</span>
+  </div>
 
   <!-- 🔔 リマインド帯（全タブ共通でトップに表示） -->
   <div id="reminders"></div>
 
   <!-- 🎁 提案 -->
   <section id="view-suggest">
-    <h1>🎁 プレゼント提案</h1>
+    <h1><span class="h-ico" data-icon="gift"></span>プレゼント提案</h1>
     <p class="sub">3〜5件だけ。迷わず・確信を持って決められるように。</p>
     <div class="panel">
       <label>誰に贈る？</label>
@@ -35,7 +41,7 @@
         <input type="range" id="s-bmin-r" class="budget-range" aria-label="予算の下限" />
         <input type="range" id="s-bmax-r" class="budget-range" aria-label="予算の上限" />
       </div>
-      <p class="sub" style="margin:6px 0 0">下限は2,000円。上限は下限より下げられません。1万円までは1,000円きざみ、超えると5,000円きざみ。</p>
+      <p class="sub" style="margin:6px 0 0">下限は2,000円。上限は下限より下げられません。1万円までは1,000円きざみ、超えると5,000円きざみ（最上段は「10万円以上」＝上限なし）。</p>
       <label>相手のこと（登録メモに足したいことがあれば）</label>
       <textarea id="s-free" placeholder="例：最近ライブ映像をよく見てる。手が乾燥するとよく言う。"></textarea>
       <button class="primary" id="s-go">提案してもらう</button>
@@ -46,7 +52,7 @@
 
   <!-- 👪 人 -->
   <section id="view-people" class="hidden">
-    <h1>👪 贈る相手</h1>
+    <h1><span class="h-ico" data-icon="people"></span>贈る相手</h1>
     <p class="sub">登録すると、提案がその人専用に育ちます。</p>
     <div class="people-grid" id="people-grid"></div>
 
@@ -63,12 +69,12 @@
         </div>
       </div>
       <div class="panel">
-        <h2 style="font-size:15px;margin:0 0 8px">🗓 一回きりの予定（出産祝いなど）</h2>
+        <h2 style="font-size:15px;margin:0 0 8px"><span class="h-ico" data-icon="calendar" data-size="18"></span>一回きりの予定（出産祝いなど）</h2>
         <div id="pd-occasions"></div>
         <button class="ghost" id="pd-add-occasion" style="margin-top:12px">＋ 予定を追加</button>
       </div>
       <div class="panel">
-        <h2 style="font-size:15px;margin:0 0 8px">🎁 贈答の記録</h2>
+        <h2 style="font-size:15px;margin:0 0 8px"><span class="h-ico" data-icon="gift" data-size="18"></span>贈答の記録</h2>
         <div id="pd-events"></div>
         <button class="ghost" id="pd-add-event" style="margin-top:12px">＋ あげた / もらった を記録</button>
       </div>
@@ -77,16 +83,19 @@
 
   <!-- 📅 カレンダー -->
   <section id="view-cal" class="hidden">
-    <h1>📅 カレンダー</h1>
-    <p class="sub">誕生日にその人のアイコン、🎁は贈った/もらった日。</p>
+    <h1><span class="h-ico" data-icon="calendar"></span>カレンダー</h1>
+    <p class="sub">日付をタップでメモ。誕生日・記念日・行事・贈答がすべて並びます。</p>
     <div class="panel">
       <div class="cal-head">
-        <button class="ghost" id="cal-prev">‹</button>
+        <button class="ghost" id="cal-prev-year" title="前の年">«</button>
+        <button class="ghost" id="cal-prev" title="前の月">‹</button>
         <h2 id="cal-title"></h2>
-        <button class="ghost" id="cal-next">›</button>
+        <button class="ghost" id="cal-next" title="次の月">›</button>
+        <button class="ghost" id="cal-next-year" title="次の年">»</button>
       </div>
+      <div style="text-align:center;margin:-4px 0 12px"><button class="mini" id="cal-today">今日にもどる</button></div>
       <div class="cal-grid" id="cal-grid"></div>
-      <div class="legend">丸＝誕生日（タップで提案へ） / 🎁＝贈答記録</div>
+      <div class="legend">日付タップでメモ・提案。丸＝誕生日/記念日、ギフト印＝贈答、鉛筆＝メモ。</div>
     </div>
   </section>
 
@@ -102,6 +111,7 @@
 <div id="modal-root"></div>
 
 <script src="/icons.js"></script>
+<script src="/holidays.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

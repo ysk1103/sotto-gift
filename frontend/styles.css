@@ -28,11 +28,14 @@ body.theme-dark{background:radial-gradient(120% 80% at 50% 0,#221d2c,#14121a 70%
   margin-bottom:18px;}
 .appbar .logo{font-size:22px;font-weight:700;color:var(--accent-deep);font-family:var(--serif);}
 .appbar .tagline{font-size:12px;color:var(--muted);}
-.appbar .gear{margin-left:auto;background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;
-  border-radius:10px;line-height:1;}
-.appbar .gear:hover{background:var(--surface);}
+.appbar .gear{margin-left:auto;background:var(--accent-soft);border:none;cursor:pointer;padding:8px;
+  border-radius:50%;line-height:0;color:var(--accent-deep);box-shadow:0 1px 4px rgba(0,0,0,.12);}
+.appbar .gear:hover{filter:brightness(1.05);transform:rotate(20deg);transition:.2s;}
+body.theme-dark .appbar .gear{color:var(--accent);background:rgba(205,164,106,.18);}
 
 h1{font-size:23px;margin:6px 0 2px;font-weight:700;font-family:var(--serif);}
+.h-ico{display:inline-flex;vertical-align:-4px;margin-right:7px;color:var(--accent-deep);}
+.modal h2 .h-ico{vertical-align:-3px;margin-right:6px;}
 .sub{color:var(--muted);font-size:13px;margin:0 0 18px;}
 
 /* タブバー */
@@ -80,6 +83,24 @@ button.mini{background:none;border:none;color:var(--muted);cursor:pointer;font-s
 .range-dual input[type=range].budget-range::-moz-range-thumb{pointer-events:auto;width:26px;height:26px;
   border-radius:50%;background:var(--accent);border:3px solid var(--card);box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:grab;}
 #budget-label{color:var(--accent-deep);font-weight:800;font-size:15px;}
+
+/* 広告バナー（無料会員） */
+.ad{display:flex;align-items:center;gap:10px;background:repeating-linear-gradient(45deg,var(--surface),var(--surface) 10px,var(--card) 10px,var(--card) 20px);
+  border:1px dashed var(--line);border-radius:12px;padding:14px 16px;margin-bottom:16px;color:var(--muted);font-size:12.5px;}
+.ad-tag{font-size:10px;font-weight:800;background:var(--muted);color:var(--card);padding:2px 7px;border-radius:4px;flex-shrink:0;}
+
+/* 提案カードのロック（無料・3件目以降ぼかし） */
+.gift.locked{position:relative;}
+.gift.locked .top-row{filter:blur(6px);opacity:.6;pointer-events:none;user-select:none;}
+.lock-ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  background:rgba(255,253,248,.35);}
+body.theme-dark .lock-ov{background:rgba(20,18,26,.45);}
+.lock-ov .lock-msg{font-weight:800;color:var(--accent-deep);display:flex;align-items:center;gap:6px;}
+
+/* 贈答の写真サムネ */
+.ev-thumb{width:46px;height:46px;border-radius:8px;object-fit:cover;flex-shrink:0;}
+.ev-photo-input{margin-top:4px;}
+#ev-preview img{margin-top:8px;width:100%;max-height:200px;object-fit:cover;border-radius:10px;}
 
 /* 🔔 リマインド帯 */
 .remind-head{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;
@@ -167,11 +188,16 @@ button.mini{background:none;border:none;color:var(--muted);cursor:pointer;font-s
 .cell.empty{background:transparent;box-shadow:none;}
 .cell .num{color:var(--muted);font-weight:600;}
 .cell.sun .num{color:#d65a5a;} .cell.sat .num{color:var(--blue);}
+.cell.holiday .num{color:#d65a5a;}
+.cell .hol-name{display:block;font-size:8px;line-height:1.1;color:#d65a5a;overflow:hidden;white-space:nowrap;
+  text-overflow:ellipsis;margin-top:1px;}
 .cell.today{outline:2px solid var(--accent);}
 .cell .marks{position:absolute;inset:auto 0 5px 0;display:flex;justify-content:center;gap:2px;flex-wrap:wrap;}
 .cell .bday{width:25px;height:25px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-size:15px;cursor:pointer;}
-.cell .gift-dot{font-size:12px;}
+.cell .gift-dot{font-size:12px;color:var(--muted);}
+.cell .cal-occ{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  background:var(--accent-soft);color:var(--accent-deep);cursor:pointer;}
 .legend{margin-top:14px;color:var(--muted);font-size:12px;}
 
 /* モーダル */

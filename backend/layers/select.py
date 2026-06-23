@@ -124,9 +124,22 @@ def _budget(it: Item, intent: SearchIntent) -> float:
     return 0.4 + 0.6 * ratio                          # 上限寄りを軽く加点（安すぎ減点）
 
 
+def _freshness(title: str, shown: list[str]) -> float:
+    """「またこれ？」防止。最近提案した物ほど強く減点（古い既出は徐々に復活）。
+
+    未提案=1.0 / 直近に出した=0.3 / だいぶ前に出した=～0.8。これでローテーションする。
+    """
+    if title not in shown:
+        return 1.0
+    idx = shown.index(title)                      # 0 = 直近に提案
+    return 0.3 + 0.5 * min(idx, 10) / 10
+
+
 def score_items(items: list[Item], profile: RecipientProfile, intent: SearchIntent,
-                gave_categories: set[str] | None = None) -> list[tuple[Item, float, dict]]:
+                gave_categories: set[str] | None = None,
+                shown: list[str] | None = None) -> list[tuple[Item, float, dict]]:
     gave_categories = gave_categories or set()
+    shown = shown or []
     max_reviews = max((it.review_count for it in items), default=1) or 1
     scored = []
     profile_terms = profile.free_text + profile.likes + intent.keywords
@@ -136,10 +149,11 @@ def score_items(items: list[Item], profile: RecipientProfile, intent: SearchInte
         trend = _trend(it, profile)
         novelty = _novelty(it, gave_categories)
         budget = _budget(it, intent)
+        fresh = _freshness(it.title, shown)               # 既出は減点＝ローテーション
         total = (W_FIT * fit + W_QUALITY * quality + W_TREND * trend
-                 + W_NOVELTY * novelty + W_BUDGET * budget)
+                 + W_NOVELTY * novelty + W_BUDGET * budget) * fresh
         parts = {"fit": fit, "quality": quality, "trend": trend,
-                 "novelty": novelty, "budget": budget}
+                 "novelty": novelty, "budget": budget, "fresh": fresh}
         scored.append((it, total, parts))
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored
@@ -194,12 +208,32 @@ RELAX_LADDER = [
 ]
 
 
+def _ensure_surprise(selected, scored, k):
+    """「鉄板ばかり」にしない。最終セットに“意外性”を最低1件入れる（仕様書：凡庸＝敵）。
+
+    意外性＝新着、または上位と別カテゴリ。先頭(イチオシ)は守り、下位枠と入れ替える。
+    """
+    if any(s[0].is_new for s in selected):
+        return selected
+    top_cats = {s[0].category for s in selected[:2]}
+    surprise = next((s for s in scored
+                     if s not in selected and (s[0].is_new or s[0].category not in top_cats)), None)
+    if surprise is None:
+        return selected
+    if len(selected) >= k:
+        selected = selected[:-1]                  # 一番下を1枠空ける（先頭は守る）
+    selected.append(surprise)
+    return selected
+
+
 def select(items: list[Item], profile: RecipientProfile, intent: SearchIntent,
            gave_history: list[str] | None = None,
-           gave_categories: set[str] | None = None) -> tuple[list[tuple[Item, float, dict]], int]:
+           gave_categories: set[str] | None = None,
+           shown: list[str] | None = None) -> tuple[list[tuple[Item, float, dict]], int]:
     """③ の入口。確定 3〜5件と「どこまで緩めたか(relax_level)」を返す。
 
     候補(items)が在庫ありで1つでもあれば、必ず非空で返す（ゼロ提案を出さない）。
+    shown=過去に提案した品名（再提案でローテーションして「またこれ？」を防ぐ）。
     """
     best: tuple[int, list[Item]] | None = None
     for level, flags in enumerate(RELAX_LADDER):
@@ -214,7 +248,8 @@ def select(items: list[Item], profile: RecipientProfile, intent: SearchIntent,
     if best is None:                                         # 在庫ありが皆無＝候補自体が無い
         return [], -1
     level, passed = best
-    scored = score_items(passed, profile, intent, gave_categories)
+    scored = score_items(passed, profile, intent, gave_categories, shown)
     selected = mmr_select(scored, RESULT_MAX)
     selected = _ensure_non_ec(selected, scored, RESULT_MAX)
+    selected = _ensure_surprise(selected, scored, RESULT_MAX)  # 意外性枠
     return selected[:RESULT_MAX], level
