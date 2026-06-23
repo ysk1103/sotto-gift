@@ -1,0 +1,59 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>案C ミニマル・エディトリアル</title>
+<style>
+:root{--plum:#7a2e48;--plum-soft:#f3e8ec;--ink:#1b1b1b;--muted:#8c8c8c;--line:#ebebeb;--paper:#fff;}
+*{box-sizing:border-box;}
+body{font-family:"Hiragino Kaku Gothic ProN","Segoe UI",sans-serif;color:var(--ink);margin:0;padding-bottom:96px;background:#fcfbfb;min-height:100vh;}
+.wrap{max-width:680px;margin:0 auto;padding:14px 20px;}
+.appbar{display:flex;align-items:baseline;justify-content:space-between;padding:18px 0 22px;}
+.appbar .logo{font-size:17px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;}
+.appbar .tagline{font-size:11px;color:var(--muted);letter-spacing:.05em;}
+h1{font-size:26px;margin:8px 0 4px;font-weight:600;font-family:Georgia,"Hiragino Mincho ProN",serif;letter-spacing:.01em;}
+.sub{color:var(--muted);font-size:12.5px;margin:0 0 22px;letter-spacing:.02em;}
+.remind-head{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.16em;margin:2px 0 12px;}
+#reminders{display:grid;gap:0;margin-bottom:28px;border-top:1px solid var(--line);}
+.remind{display:flex;align-items:center;gap:14px;padding:15px 4px;border-bottom:1px solid var(--line);}
+.remind .ric{width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:19px;}
+.remind .rtext{flex:1;font-size:13.5px;line-height:1.5;}
+.remind .rday{font-size:11px;font-weight:700;color:var(--plum);letter-spacing:.04em;}
+.remind.today .rtext{font-weight:700;}
+.remind.today .ric{color:var(--plum);}
+.results{display:grid;gap:0;border-top:1px solid var(--line);}
+.gift{background:transparent;padding:22px 0;border-bottom:1px solid var(--line);position:relative;}
+.gift .top-row{display:flex;gap:18px;}
+.gift img{width:110px;height:110px;object-fit:cover;border-radius:2px;}
+.gift .body{flex:1;}
+.gift .type{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;}
+.gift h3{margin:7px 0 9px;font-size:17px;font-weight:600;font-family:Georgia,"Hiragino Mincho ProN",serif;}
+.gift .reason{font-size:14px;line-height:1.85;color:#3a3a3a;}
+.gift .evi{margin-top:12px;display:flex;flex-wrap:wrap;gap:14px;}
+.gift .evi span{font-size:11px;color:var(--muted);letter-spacing:.02em;}
+.gift a.buy{display:inline-block;margin-top:14px;font-size:12px;color:var(--ink);font-weight:700;text-decoration:none;border-bottom:1.5px solid var(--plum);padding-bottom:2px;letter-spacing:.05em;}
+.gift.top .rank{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--plum);border:1px solid var(--plum);padding:2px 8px;border-radius:2px;margin-bottom:10px;}
+.cta{padding:24px 0;text-align:center;}
+.cta b{font-size:15px;font-family:Georgia,"Hiragino Mincho ProN",serif;} .cta p{color:var(--muted);font-size:12.5px;margin:7px 0 14px;}
+.ghost{background:transparent;border:1px solid var(--ink);color:var(--ink);border-radius:2px;padding:10px 20px;font-size:12px;font-weight:700;letter-spacing:.06em;cursor:pointer;}
+.tabbar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:10px 0 16px;}
+.tabbar div{font-size:10px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:4px;letter-spacing:.06em;}
+.tabbar div .ico{font-size:20px;filter:grayscale(1);opacity:.6;}
+.tabbar div.active{color:var(--ink);font-weight:700;}
+.tabbar div.active .ico{filter:none;opacity:1;}
+</style></head><body>
+<div class="wrap">
+  <header class="appbar"><span class="logo">Okurimono</span><span class="tagline">迷わず、確信を持って</span></header>
+  <div class="remind-head">UPCOMING ・ もうすぐ</div>
+  <div id="reminders">
+    <div class="remind today"><div class="ric">👧</div><div class="rtext">今日は娘の誕生日。おめでとう。</div></div>
+    <div class="remind push"><div class="ric">💑</div><div class="rtext">夫へのバレンタインまで、あと7日。</div><span class="rday">あと7日</span></div>
+  </div>
+  <h1>あなたへの提案</h1>
+  <p class="sub">お母さんへ ・ 予算 2,000〜8,000円</p>
+  <div class="results">
+    <div class="gift top"><div class="top-row"><img src="https://picsum.photos/seed/sweets/300"><div class="body"><span class="rank">イチオシ</span><br><span class="type">買えるもの</span><h3>お取り寄せ 抹茶テリーヌ</h3><div class="reason">「お茶」が好きなお母さんに、濃厚な抹茶の焼き菓子。コーヒー・お茶好きに刺さる新作です。</div><div class="evi"><span>★4.8（960件）</span><span>ランキング5位</span><span>新着</span><span>3,800円</span></div><a class="buy" href="#">商品を見る →</a></div></div></div>
+    <div class="gift"><div class="top-row"><img src="https://picsum.photos/seed/flower/300"><div class="body"><span class="type">買えるもの</span><h3>プリザーブドフラワー BOX</h3><div class="reason">枯れずに長く飾れる花。母の日の鉄板で満足度が高い一品です。</div><div class="evi"><span>★4.5（2,100件）</span><span>ランキング1位</span><span>5,200円</span></div><a class="buy" href="#">商品を見る →</a></div></div></div>
+    <div class="cta"><b>🎨 手作りで贈るのもいい</b><p>商品は出しません。何を作りたいか、一緒に考えます。</p><button class="ghost">手作りを一緒に考える →</button></div>
+  </div>
+</div>
+<nav class="tabbar"><div class="active"><span class="ico">🎁</span>提案</div><div><span class="ico">👪</span>人</div><div><span class="ico">📅</span>カレンダー</div></nav>
+</body></html>

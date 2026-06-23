@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ユーザーデータ（登録した人・贈答履歴。コードではないので保存対象外）
+data/store.json
+
+# OS
+Thumbs.db
+.DS_Store
