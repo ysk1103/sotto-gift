@@ -136,8 +136,28 @@ async function subscribe(){
   renderAds();
   await loadPeople();
 }
-// 隠しギミック：タイトルタップでランダム1点
+// 隠しギミック：タイトルタップでランダム1点。連打対策で4回目以降はタップ広告に。
+let surpriseTaps = 0;
+const SURPRISE_FREE = 3;
+const AD_URL = "https://www.rakuten.co.jp/";   // TODO: 本番はアフィリエイト広告リンクに差し替え
+function openAdModal(){
+  modal(`
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("gift",20)} スポンサー</h2>
+    <div class="ad" id="ad-go" style="cursor:pointer">
+      <span class="ad-tag">広告</span>
+      <span>提携ショップでギフトをもっと探す →</span>
+    </div>
+    <p class="sub" style="margin:8px 0 0">※ひらめきギフトの連続表示は3回まで。プレミアムなら無制限・広告なし。</p>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">閉じる</button>
+      <button class="primary" style="margin:0" id="ad-premium">プレミアムにする</button>
+    </div>`);
+  document.getElementById("ad-go").onclick = () => window.open(AD_URL, "_blank", "noopener");
+  document.getElementById("ad-premium").onclick = () => openUpsell("ひらめきギフトを無制限・広告なしで。");
+}
 async function surpriseGift(){
+  surpriseTaps++;
+  if (!isSubscribed && surpriseTaps > SURPRISE_FREE){ openAdModal(); return; }  // 連打→広告
   const c = await api.get("/api/surprise");
   if (!c || c.detail) return;
   modal(`
