@@ -41,7 +41,8 @@ def _fetch_rakuten(intent: SearchIntent, app_id: str, access_key: str) -> list[I
     pool: dict[str, Item] = {}
     for q in queries:
         for it in _search(q, intent, app_id, access_key):
-            pool.setdefault(it.url or it.title, it)   # URLで重複排除
+            key = "".join(it.title.split())[:40].lower()   # 品名で重複排除（別店の同名も1つに）
+            pool.setdefault(key, it)
     return list(pool.values())
 
 
