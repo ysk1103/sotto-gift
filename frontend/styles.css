@@ -132,10 +132,20 @@ body.theme-dark .lock-ov{background:rgba(20,18,26,.45);}
 .gift .type{display:inline-block;font-size:10px;font-weight:800;padding:3px 10px;border-radius:4px;
   background:var(--accent-soft);color:var(--accent-deep);letter-spacing:.05em;}
 .gift .type.experience{background:var(--surface);color:var(--blue);}
-.gift h3{margin:9px 0 9px;font-size:16px;font-family:var(--serif);}
-/* 語り（理由）はテーマのアクセント色＋左の色帯で、商品情報と区別 */
-.gift .reason{font-size:14.5px;line-height:1.8;color:var(--accent-deep);
-  border-left:3px solid var(--accent);padding-left:10px;margin-top:2px;}
+.gift h3{margin:9px 0 9px;font-size:16px;font-family:var(--serif);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+/* 価格を大きく＋購入導線を1行に */
+.gift .buy-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:12px;}
+.gift .price{font-size:19px;font-weight:800;color:var(--ink);white-space:nowrap;}
+.gift .price .was{font-size:12px;color:var(--muted);text-decoration:line-through;font-weight:600;margin-right:5px;}
+.gift .price .now{color:var(--accent-deep);}
+.gift .price .sale{font-size:10px;font-weight:800;color:var(--on-accent);background:var(--accent);
+  padding:1px 6px;border-radius:4px;margin-left:6px;}
+.gift .buy-row a.buy{margin-top:0;white-space:nowrap;}
+/* 語り（理由）は薄い色の囲みにして、商品情報とはっきり区別 */
+.gift .reason{font-size:14.5px;line-height:1.75;color:var(--accent-deep);
+  background:var(--accent-soft);border-left:3px solid var(--accent);
+  padding:9px 11px;border-radius:0 8px 8px 0;margin-top:4px;}
 .gift .evi{margin-top:12px;display:flex;flex-wrap:wrap;gap:7px;}
 .gift .evi span{font-size:11px;background:var(--surface);color:var(--muted);padding:3px 10px;border-radius:4px;font-weight:600;}
 .gift a.buy{display:inline-block;margin-top:13px;font-size:13px;color:var(--accent-deep);font-weight:800;

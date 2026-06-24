@@ -49,6 +49,15 @@ _load_dotenv()
 
 app = FastAPI(title="プレゼント提案エンジン")
 
+
+@app.middleware("http")
+async def _no_cache(request, call_next):
+    """開発中はブラウザにキャッシュさせない（CSS/JS変更が即反映されるように）。"""
+    resp = await call_next(request)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
@@ -93,16 +102,17 @@ def _build_inputs(req: SuggestRequest):
                 if e.get("category"):
                     gave_categories.add(e["category"])
             elif e["direction"] == "received":
-                # もらったもの → センス推定（タイトル・カテゴリを好みヒントに）
-                learned += _split(e["title"])
+                # もらったもの → センス推定は「カテゴリ（傾向）」だけ。
+                # 具体的な商品名を検索キーにすると同じ商品ばかりになるので使わない。
                 if e.get("category"):
                     learned.append(e["category"])
 
     profile = RecipientProfile(
         relation=relation, gender=resolve_gender(relation, gender), age_band=age_band,
-        free_text=free + learned, likes=likes, avoid=avoid,
+        free_text=free + learned, likes=likes, avoid=avoid,   # learnedは薄く混ぜてFitにほんのり
     )
-    keywords = req.keywords or (free + likes + learned)
+    # 検索キーワードは「本人の明示的な好み」だけ。もらった履歴で検索を狭めない。
+    keywords = req.keywords or (free + likes)
     budget_min = max(2000, req.budget_min)                  # 下限は一律2,000円（それ未満は想定外）
     budget_max = max(budget_min, req.budget_max)
     intent = SearchIntent(keywords=keywords, budget_min=budget_min, budget_max=budget_max)

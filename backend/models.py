@@ -125,7 +125,8 @@ class SuggestionCard:
     name: str
     type: str               # "buy" | "experience" | "make"
     reason: str
-    evidence: list[str]     # 使った実データ点
+    evidence: list[str]     # 使った実データ点（★評価・ランキング・新着など。価格は別フィールド）
     url: str
     image_url: str
     price: int
+    list_price: int = 0     # 通常価格（セール表示用。0=通常価格と同じ）

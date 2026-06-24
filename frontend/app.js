@@ -167,10 +167,10 @@ async function surpriseGift(){
         <img src="${c.image_url}" alt="" />
         <div class="body">
           <span class="type ${c.type==="experience"?"experience":""}">${TYPE_LABEL[c.type]||c.type}</span>
-          <h3>${esc(c.name)}</h3>
+          <h3 title="${esc(c.name)}">${esc(c.name)}</h3>
           <div class="reason">${esc(c.reason)}</div>
           <div class="evi">${(c.evidence||[]).map(e=>`<span>${e}</span>`).join("")}</div>
-          <a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a>
+          <div class="buy-row">${priceHTML(c)}<a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a></div>
         </div>
       </div>
     </div>
@@ -354,10 +354,10 @@ async function runSuggest(){
             <img src="${c.image_url}" alt="" />
             <div class="body">
               <span class="type ${typeCls}">${TYPE_LABEL[c.type]||c.type}</span>
-              <h3>${esc(c.name)}</h3>
+              <h3 title="${esc(c.name)}">${esc(c.name)}</h3>
               <div class="reason">${esc(c.reason)}</div>
               <div class="evi">${evi}</div>
-              <a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a>
+              <div class="buy-row">${priceHTML(c)}<a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a></div>
             </div>
           </div>
           ${locked?`<div class="lock-ov"><div class="lock-msg">${icon("sparkle",16)}プレミアムで全部見る</div><button class="ghost up-btn">プレミアムにする</button></div>`:""}
@@ -455,6 +455,14 @@ function renderPeopleGrid(){
 function currentPerson(){ return people.find(p => p.id === selectedPersonId); }
 // 名前が未入力なら関係名（「母」など）で成り立たせる
 function displayName(p){ return (p.name && p.name.trim()) || RELATIONS[p.relation] || "相手"; }
+// 価格を大きく表示（セールなら通常価格に取り消し線）
+function priceHTML(c){
+  if (c.list_price && c.list_price > c.price){
+    return `<span class="price"><span class="was">¥${c.list_price.toLocaleString()}</span>`
+      + `<span class="now">¥${c.price.toLocaleString()}</span><span class="sale">セール</span></span>`;
+  }
+  return `<span class="price">¥${(c.price||0).toLocaleString()}</span>`;
+}
 // 顔写真があれば写真、無ければアイコン（顔写真は無料機能）
 function avatarHTML(p, size){
   if (p.photo_url) return `<img src="${p.photo_url}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;display:block" />`;

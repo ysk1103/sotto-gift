@@ -25,7 +25,7 @@ BAYES_PRIOR_WEIGHT = 20
 # 年代ごとの Trend 重み（高齢ほど定番寄り＝Trend を下げる）
 AGE_TREND_FACTOR = {"20s": 1.0, "30s": 1.0, "40s": 0.9, "50s": 0.8, "60s": 0.6, "70s": 0.4, "80s": 0.3}
 
-MMR_LAMBDA = 0.7
+MMR_LAMBDA = 0.6          # 低いほど多様性重視（似た商品の連続を防ぐ）
 RESULT_MIN, RESULT_MAX = 3, 5
 
 
@@ -181,7 +181,7 @@ def score_items(items: list[Item], profile: RecipientProfile, intent: SearchInte
 # ============ 第3段：MMR 多様性選択 ============
 def _sim(a: Item, b: Item) -> float:
     cat = 1.0 if a.category == b.category else 0.0
-    return 0.5 * cat + 0.5 * _overlap(a.text(), b.text())
+    return 0.3 * cat + 0.7 * _overlap(a.title, b.title)   # 品名の似かた重視（似た商品を弾く）
 
 
 def mmr_select(scored: list[tuple[Item, float, dict]], k: int = RESULT_MAX) -> list[tuple[Item, float, dict]]:

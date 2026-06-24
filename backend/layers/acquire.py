@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 
@@ -17,6 +18,16 @@ from ..mock_data import MOCK_ITEMS
 
 # 2026年刷新後の新エンドポイント（旧 app.rakuten.co.jp は2026/5に停止）
 RAKUTEN_ENDPOINT = "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401"
+
+
+def _clean_title(t: str) -> str:
+    """楽天のキーワード詰め込み商品名を見やすく整形（確実な宣伝ノイズだけ除去＋長さ上限）。"""
+    t = re.sub(r"[【\[(（][^】\])）]*[】\])）]", "", t)       # 【...】[...](...)＝宣伝枠を除去
+    t = re.sub(r"[★☆\\／]", " ", t)
+    t = re.sub(r"(送料無料|あす楽|期間限定|ポイント\d+倍|P\d+倍|\d+%OFF|"
+               r"遅れてごめん\S*|今だけ|数量限定|限定\d*)", " ", t)
+    t = re.sub(r"\s+", " ", t).strip(" 　/・|,")
+    return (t[:32] + "…") if len(t) > 33 else t
 
 
 def fetch_candidates(intent: SearchIntent) -> list[Item]:
@@ -77,7 +88,7 @@ def _search(keyword: str, intent: SearchIntent, app_id: str, access_key: str) ->
         image_url = (imgs[0].get("imageUrl") if imgs and isinstance(imgs[0], dict) else "") or ""
         image_url = image_url.split("?")[0]           # サイズ指定パラメータを除去
         items.append(Item(
-            title=r.get("itemName", ""),
+            title=_clean_title(r.get("itemName", "")),
             price=int(r.get("itemPrice", 0) or 0),
             in_stock=(int(r.get("availability", 1)) == 1),
             rating=float(r.get("reviewAverage", 0) or 0),

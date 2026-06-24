@@ -24,6 +24,7 @@ GEMINI_MODEL_DEFAULT = "gemini-2.5-flash-lite"     # 無料枠で動く最安級
 
 
 def _evidence(it: Item) -> list[str]:
+    # 価格はカード専用フィールド(price/list_price)で大きく出すので、ここには入れない
     ev: list[str] = []
     if it.review_count:
         ev.append(f"★{it.rating}（レビュー{it.review_count:,}件）")
@@ -31,10 +32,6 @@ def _evidence(it: Item) -> list[str]:
         ev.append(f"ランキング{it.ranking_rank}位")
     if it.is_new:
         ev.append("新着")
-    if it.list_price and it.list_price > it.price:
-        ev.append(f"通常{it.list_price:,}円→{it.price:,}円")
-    else:
-        ev.append(f"{it.price:,}円")
     return ev
 
 
@@ -46,7 +43,8 @@ def _matched_points(it: Item, profile: RecipientProfile) -> list[str]:
 def _card(it: Item, reason: str) -> SuggestionCard:
     return SuggestionCard(
         name=it.title, type=it.type, reason=reason,
-        evidence=_evidence(it), url=it.url, image_url=it.image_url, price=it.price,
+        evidence=_evidence(it), url=it.url, image_url=it.image_url,
+        price=it.price, list_price=it.list_price,
     )
 
 
