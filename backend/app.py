@@ -28,6 +28,7 @@ from datetime import date
 
 from . import store
 from .layers import handmade, reminders
+from .layers.embed import attach_embeddings
 from .layers.acquire import fetch_candidates
 from .layers.narrate import get_narrator
 from .layers.select import select
@@ -141,6 +142,7 @@ def suggest(req: SuggestRequest):
     shown = store.get_shown(req.person_id) if req.person_id else []         # 既出（ローテーション用）
 
     candidates = fetch_candidates(intent)                                  # ②
+    attach_embeddings(profile, candidates)                                 # Fit用ベクトル付与（失敗時は部分一致）
     selected, relax_level = select(candidates, profile, intent, gave_history, gave_categories, shown)  # ③
     items = [it for it, _s, _p in selected]
     cards = get_narrator().narrate(profile, items)                         # ④

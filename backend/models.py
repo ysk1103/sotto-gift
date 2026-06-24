@@ -50,6 +50,7 @@ class Item:
     list_price: int = 0                  # 通常価格（0=不明）。安すぎ判定はこちらで見る
     shop_name: str = ""                  # 出店ショップ名（ブランド信頼判定で後で使う）
     target_gender: str = ""              # ""=男女問わず / "female" / "male"
+    embedding: Optional[list] = None     # Fit計算用ベクトル（②取得後に付与）
     ranking_rank: Optional[int] = None   # ランキング順位（あれば）
     is_new: bool = False
     # type: 買えるもの / 体験 / 手作り（非ECは "experience" | "make"）
@@ -69,7 +70,7 @@ class RecipientProfile:
     free_text: list[str] = field(default_factory=list)   # 自由記述（燃料）
     likes: list[str] = field(default_factory=list)
     avoid: list[str] = field(default_factory=list)
-    # embedding は後で（Fit を embedding に差し替えるときに使う）
+    embedding: Optional[list] = None        # 相手像のベクトル（Fit計算に使用）
 
     def text(self) -> str:
         return " ".join(self.free_text + self.likes)

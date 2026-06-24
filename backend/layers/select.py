@@ -35,11 +35,15 @@ RESULT_MIN, RESULT_MAX = 3, 5
 #   item同士の sim = 文字バイグラムの Jaccard
 # で暫定対応する。embedding に差し替えれば両方とも cosine に置き換わる。
 
-def _fit(profile_terms: list[str], item_text: str) -> float:
-    """相手プロファイルの語が商品テキストにどれだけ反映されているか（0〜1）。
+def _cos(a, b) -> float:
+    s = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    return s / (na * nb) if na and nb else 0.0
 
-    TODO(embedding 差し替え): cosine(profile.embedding, item.embedding) にする。
-    """
+
+def _fit(profile_terms: list[str], item_text: str) -> float:
+    """部分一致Fit（embeddingが無い時のフォールバック）。相手の語が商品にどれだけ含まれるか。"""
     terms = [t for t in profile_terms if t]
     if not terms:
         return 0.0
@@ -143,8 +147,23 @@ def score_items(items: list[Item], profile: RecipientProfile, intent: SearchInte
     max_reviews = max((it.review_count for it in items), default=1) or 1
     scored = []
     profile_terms = profile.free_text + profile.likes + intent.keywords
+
+    # Fit: embedding(cosine)があれば意味ベース、無ければ部分一致。
+    # cosは0.5付近に密集するので候補内でmin-max正規化して差を効かせる。
+    use_emb = bool(profile.embedding) and any(it.embedding for it in items)
+    cos_by = {}
+    if use_emb:
+        for it in items:
+            if it.embedding:
+                cos_by[id(it)] = _cos(profile.embedding, it.embedding)
+        vals = list(cos_by.values())
+        cmin, cmax = (min(vals), max(vals)) if vals else (0.0, 1.0)
+
     for it in items:
-        fit = _fit(profile_terms, it.text())
+        if use_emb and id(it) in cos_by:
+            fit = (cos_by[id(it)] - cmin) / (cmax - cmin) if cmax > cmin else 0.6
+        else:
+            fit = _fit(profile_terms, it.text())
         quality = _quality(it, max_reviews)
         trend = _trend(it, profile)
         novelty = _novelty(it, gave_categories)

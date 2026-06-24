@@ -124,13 +124,13 @@ API: GET/POST /api/people, DELETE /api/people/{id}
 ## いまの暫定（＝あとで本物に差し替える残り）
 1. **②データ：楽天API 接続済み（本物の商品が出る）✅**。`acquire.py`、新エンドポイント＋accessKey、語ごとに「○○ ギフト」検索して束ねる。鍵は `.env`（gitignore）。詳細は記憶 rakuten-api-2026。
    - 残：Yahoo/ギフトモール/アソビュー追加、高級帯の百貨店優先、ブランド信頼チューニング（shop_name/レビューを実データで）。
-2. **③Fit**：いま「相手の語が商品テキストに含まれるか（部分一致）」の暫定。
-   → **embedding（multilingual-e5 等）の cosine** に差し替え。`select.py:_fit()`。
+2. **③Fit：embedding(cosine) 接続済み ✅**。`backend/layers/embed.py`（Gemini `gemini-embedding-001`・無料枠・urllib・キャッシュ）。
+   - `attach_embeddings()`で相手像＋候補をベクトル化→`select.score_items`がcosineをmin-max正規化してFit。鍵無し/失敗時は部分一致に自動フォールバック。
+   - 意味で繋がる（甘いもの↔抹茶テリーヌ等）。embeddingは無料（語りのHaikuのみ課金）。
 3. **④語り：Claude(Haiku) 接続済み ✅**。`narrate.py` に ClaudeNarrator / GeminiNarrator / TemplateNarrator。
    - LLMには「理由文」だけ書かせ、価格/リンク/画像/evidenceは実データで組む＝創作防止。鍵無し/失敗時はテンプレに自動フォールバック。
    - プロバイダ切替：`.env` の `NARRATE_PROVIDER=claude|gemini|template`（既定claude=Haiku $1/$5、geminiは無料枠だが構造化で503出やすい）。
    - 比較スクリプト：`python compare_narrators.py`。
-   - 残：embedding（③Fitのcosine化）。
 
 ## 取得先ECと品質方針（決定済み・楽天接続後に煮詰める）
 - ECソース：①楽天 ②Yahoo ③ギフトモール ④アソビュー（体験）。Amazonは後、ヨドバシ不採用。
