@@ -48,6 +48,7 @@ class Item:
     category: str
     description: str = ""
     list_price: int = 0                  # 通常価格（0=不明）。安すぎ判定はこちらで見る
+    shop_name: str = ""                  # 出店ショップ名（ブランド信頼判定で後で使う）
     target_gender: str = ""              # ""=男女問わず / "female" / "male"
     ranking_rank: Optional[int] = None   # ランキング順位（あれば）
     is_new: bool = False

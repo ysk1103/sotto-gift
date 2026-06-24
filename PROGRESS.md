@@ -121,10 +121,9 @@ API: GET/POST /api/people, DELETE /api/people/{id}
      POST /api/suggest（person_id を渡すと履歴学習＋被り回避が効く）
 ```
 
-## いまの暫定（＝あとで本物に差し替える3か所）
-1. **②データ**：`mock_data.py` のダミー → **楽天 Web Service API**。
-   差し替えは `acquire.py:fetch_candidates()` の中だけ。`RAKUTEN_APP_ID` をenvで読む。
-   → **次にやるならここが最優先**（仕様書の walking skeleton step1）。要：楽天アプリID取得。
+## いまの暫定（＝あとで本物に差し替える残り）
+1. **②データ：楽天API 接続済み（本物の商品が出る）✅**。`acquire.py`、新エンドポイント＋accessKey、語ごとに「○○ ギフト」検索して束ねる。鍵は `.env`（gitignore）。詳細は記憶 rakuten-api-2026。
+   - 残：Yahoo/ギフトモール/アソビュー追加、高級帯の百貨店優先、ブランド信頼チューニング（shop_name/レビューを実データで）。
 2. **③Fit**：いま「相手の語が商品テキストに含まれるか（部分一致）」の暫定。
    → **embedding（multilingual-e5 等）の cosine** に差し替え。`select.py:_fit()`。
 3. **④語り**：いまテンプレ文。→ **Claude** に差し替え。`narrate.py` の TODO 参照。

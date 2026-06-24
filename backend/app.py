@@ -33,6 +33,19 @@ from .layers.narrate import get_narrator
 from .layers.select import select
 from .models import RecipientProfile, SearchIntent, resolve_gender
 
+def _load_dotenv():
+    """プロジェクト直下の .env を読み込み（秘密の鍵をenvへ）。依存ライブラリ不要。"""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+
+
+_load_dotenv()
+
 app = FastAPI(title="プレゼント提案エンジン")
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
