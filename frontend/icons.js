@@ -1,5 +1,15 @@
-// オリジナル線画アイコン（SVG）。1色 currentColor でテーマに自動追従。
+// オリジナルSVGアイコン。1色 currentColor でテーマに自動追従。
 // icon(key, size) で <svg> 文字列を返す。未知キーは gift にフォールバック。
+
+// アバター用パーツ（ゆるかわ：白い丸顔＋目・笑顔・ほっぺ。髪型で識別）
+const _FACE = `<circle cx="12" cy="12.6" r="6.6" fill="#fff" stroke="currentColor" stroke-width="1.3"/>`
+  + `<circle cx="9.8" cy="12.5" r=".95" fill="#5a4a42"/><circle cx="14.2" cy="12.5" r=".95" fill="#5a4a42"/>`
+  + `<path d="M10.3 15c.95.85 2.45.85 3.4 0" fill="none" stroke="#5a4a42" stroke-width="1.1" stroke-linecap="round"/>`
+  + `<circle cx="8.6" cy="14.3" r=".62" fill="currentColor" opacity=".4"/><circle cx="15.4" cy="14.3" r=".62" fill="currentColor" opacity=".4"/>`;
+const _GLASSES = `<circle cx="9.8" cy="12.5" r="1.8" fill="none" stroke="#5a4a42" stroke-width="1"/>`
+  + `<circle cx="14.2" cy="12.5" r="1.8" fill="none" stroke="#5a4a42" stroke-width="1"/><path d="M11.6 12.5h.8" stroke="#5a4a42" stroke-width="1"/>`;
+const _H_SHORT = `<path d="M5.9 11.6C5.9 6.6 8.5 4.1 12 4.1s6.1 2.5 6.1 7.5c-1.3-2.6-3.5-3.6-6.1-3.6S7.2 9 5.9 11.6z" fill="currentColor"/>`;
+const _H_BOB = `<path d="M5.1 14.2C5.1 6 8.4 3.4 12 3.4s6.9 2.6 6.9 10.8c-.7-.6-1.4-.8-2-.9.7-4.8-1.3-7.5-4.9-7.5S6.3 8.5 7.1 13.3c-.6.1-1.3.3-2 .9z" fill="currentColor"/>`;
 
 const SVG_ICON_PATHS = {
   // --- UI ---
@@ -29,14 +39,18 @@ const SVG_ICON_PATHS = {
   briefcase: `<rect x="3.5" y="8" width="17" height="11" rx="1.5"/><path d="M9 8V6.5C9 5.7 9.7 5 10.5 5h3c.8 0 1.5.7 1.5 1.5V8"/><line x1="3.5" y1="13" x2="20.5" y2="13"/>`,
 
   // --- アバター（人物） ---
-  person: `<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/>`,
-  woman: `<circle cx="12" cy="9" r="3.4"/><path d="M8.6 9.4C7.5 6 9.2 4 12 4s4.5 2 3.4 5.4"/><path d="M8.5 8.8C7.7 11 7.8 13 8.6 14.6"/><path d="M15.5 8.8C16.3 11 16.2 13 15.4 14.6"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/>`,
-  man: `<circle cx="12" cy="9" r="3.4"/><path d="M8.7 7.2C9.4 5 14.6 5 15.3 7.2"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/>`,
-  elder_woman: `<circle cx="12" cy="9.4" r="3.2"/><circle cx="12" cy="4.6" r="1.5"/><path d="M8.8 9.2C8.2 6.6 9.5 5.4 12 5.4s3.8 1.2 3.2 3.8"/><circle cx="10.5" cy="9.6" r="1"/><circle cx="13.5" cy="9.6" r="1"/><path d="M11.5 9.6h1"/><path d="M5.6 20c0-3.4 2.9-5.7 6.4-5.7s6.4 2.3 6.4 5.7"/>`,
-  elder_man: `<circle cx="12" cy="9.4" r="3.2"/><path d="M9 7.3C9.6 5.6 14.4 5.6 15 7.3"/><circle cx="10.5" cy="9.5" r="1"/><circle cx="13.5" cy="9.5" r="1"/><path d="M11.5 9.5h1"/><path d="M10.4 11.6c.9.5 2.3.5 3.2 0"/><path d="M5.6 20c0-3.4 2.9-5.7 6.4-5.7s6.4 2.3 6.4 5.7"/>`,
-  girl: `<circle cx="12" cy="9.8" r="3"/><circle cx="7.8" cy="10" r="1.6"/><circle cx="16.2" cy="10" r="1.6"/><path d="M9 7.4C9.6 5.8 14.4 5.8 15 7.4"/><path d="M6.8 20c0-3.1 2.4-5.2 5.2-5.2s5.2 2.1 5.2 5.2"/>`,
-  boy: `<circle cx="12" cy="9.8" r="3"/><path d="M10 7 12 5.4l2 1.6"/><path d="M9.1 7.7h5.8"/><path d="M6.8 20c0-3.1 2.4-5.2 5.2-5.2s5.2 2.1 5.2 5.2"/>`,
-  couple: `<circle cx="8.3" cy="9.8" r="2.6"/><circle cx="15.7" cy="9.8" r="2.6"/><path d="M3.8 20c0-2.9 2-4.8 4.5-4.8s4.5 1.9 4.5 4.8"/><path d="M11.2 20c0-2.9 2-4.8 4.5-4.8s4.5 1.9 4.5 4.8"/><path d="M12 3.8c.8-1 2.2-.3 1.8.8-.2.6-1.8 1.5-1.8 1.5s-1.6-.9-1.8-1.5C9.8 3.5 11.2 2.8 12 3.8z" fill="currentColor" stroke="none"/>`,
+  person: _H_SHORT + _FACE,
+  man: _H_SHORT + _FACE,
+  woman: _H_BOB + _FACE,
+  elder_woman: `<circle cx="12" cy="3.6" r="1.7" fill="currentColor"/>` + _H_BOB + _FACE + _GLASSES,
+  elder_man: _H_SHORT + _FACE + _GLASSES,
+  girl: `<circle cx="6" cy="10.6" r="2.5" fill="currentColor"/><circle cx="18" cy="10.6" r="2.5" fill="currentColor"/>` + _H_SHORT + _FACE,
+  boy: _H_SHORT + `<path d="M11.1 4.2l.9-1.5.9 1.5z" fill="currentColor"/>` + _FACE,
+  couple: `<circle cx="7.8" cy="13.2" r="4" fill="#fff" stroke="currentColor" stroke-width="1.2"/>`
+    + `<circle cx="16.2" cy="13.2" r="4" fill="#fff" stroke="currentColor" stroke-width="1.2"/>`
+    + `<circle cx="6.7" cy="13" r=".7" fill="#5a4a42"/><circle cx="8.9" cy="13" r=".7" fill="#5a4a42"/>`
+    + `<circle cx="15.1" cy="13" r=".7" fill="#5a4a42"/><circle cx="17.3" cy="13" r=".7" fill="#5a4a42"/>`
+    + `<path d="M12 3.4c.8-1 2.2-.3 1.8.8-.2.6-1.8 1.5-1.8 1.5s-1.6-.9-1.8-1.5C9.8 3.1 11.2 2.4 12 3.4z" fill="currentColor" stroke="none"/>`,
   music: `<path d="M9 18V6l9-2v12"/><circle cx="7" cy="18" r="2"/><circle cx="16" cy="16" r="2"/>`,
   book: `<path d="M12 6.5C10.5 5 8 4.5 4.5 5v13C8 17.5 10.5 18 12 19.5"/><path d="M12 6.5C13.5 5 16 4.5 19.5 5v13C16 17.5 13.5 18 12 19.5"/><line x1="12" y1="6.5" x2="12" y2="19.5"/>`,
   cake: `<line x1="3.5" y1="20.5" x2="20.5" y2="20.5"/><path d="M5.5 20.5v-7c0-1 .8-1.8 1.8-1.8h9.4c1 0 1.8.8 1.8 1.8v7"/><path d="M5.5 15c1.3 1.3 2.8 1.3 4 0s2.8-1.3 4 0 2.8 1.3 4 0"/><line x1="12" y1="7" x2="12" y2="11"/>`,
