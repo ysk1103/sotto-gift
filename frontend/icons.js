@@ -29,14 +29,14 @@ const SVG_ICON_PATHS = {
   briefcase: `<rect x="3.5" y="8" width="17" height="11" rx="1.5"/><path d="M9 8V6.5C9 5.7 9.7 5 10.5 5h3c.8 0 1.5.7 1.5 1.5V8"/><line x1="3.5" y1="13" x2="20.5" y2="13"/>`,
 
   // --- アバター（人物） ---
-  person: `<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/>`,
-  woman: `<circle cx="12" cy="8.6" r="3.1"/><path d="M8.9 8.6C8.1 6 9.6 4.3 12 4.3s3.9 1.7 3.1 4.3"/><path d="M6 20c0-3.6 2.7-6 6-6s6 2.4 6 6"/>`,
-  man: `<circle cx="12" cy="8.6" r="3.1"/><path d="M9 6.3h6"/><path d="M6 20c0-3.6 2.7-6 6-6s6 2.4 6 6"/>`,
-  elder_woman: `<circle cx="12" cy="8.6" r="3.1"/><path d="M8.9 8.6C8.1 6 9.6 4.3 12 4.3s3.9 1.7 3.1 4.3"/><circle cx="10.4" cy="8.7" r="1"/><circle cx="13.6" cy="8.7" r="1"/><path d="M11.4 8.7h1.2"/><path d="M6 20c0-3.6 2.7-6 6-6s6 2.4 6 6"/>`,
-  elder_man: `<circle cx="12" cy="8.6" r="3.1"/><path d="M9 6.3h6"/><circle cx="10.4" cy="8.7" r="1"/><circle cx="13.6" cy="8.7" r="1"/><path d="M11.4 8.7h1.2"/><path d="M6 20c0-3.6 2.7-6 6-6s6 2.4 6 6"/>`,
-  girl: `<circle cx="12" cy="9" r="2.9"/><circle cx="7.7" cy="9.3" r="1.4"/><circle cx="16.3" cy="9.3" r="1.4"/><path d="M7 20c0-3.2 2.3-5.4 5-5.4s5 2.2 5 5.4"/>`,
-  boy: `<circle cx="12" cy="9" r="2.9"/><path d="M9.3 7 12 5.3 14.7 7"/><path d="M7 20c0-3.2 2.3-5.4 5-5.4s5 2.2 5 5.4"/>`,
-  couple: `<circle cx="8.3" cy="9.5" r="2.5"/><circle cx="15.7" cy="9.5" r="2.5"/><path d="M3.8 20c0-2.9 2-4.8 4.5-4.8s4.5 1.9 4.5 4.8M11.2 20c0-2.9 2-4.8 4.5-4.8s4.5 1.9 4.5 4.8"/><path d="M12 4c.8-1 2.2-.3 1.8.8-.2.6-1.8 1.5-1.8 1.5s-1.6-.9-1.8-1.5C9.8 3.7 11.2 3 12 4z" fill="currentColor" stroke="none"/>`,
+  person: `<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/>`,
+  woman: `<circle cx="12" cy="9" r="3.4"/><path d="M8.6 9.4C7.5 6 9.2 4 12 4s4.5 2 3.4 5.4"/><path d="M8.5 8.8C7.7 11 7.8 13 8.6 14.6"/><path d="M15.5 8.8C16.3 11 16.2 13 15.4 14.6"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/>`,
+  man: `<circle cx="12" cy="9" r="3.4"/><path d="M8.7 7.2C9.4 5 14.6 5 15.3 7.2"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/>`,
+  elder_woman: `<circle cx="12" cy="9.4" r="3.2"/><circle cx="12" cy="4.6" r="1.5"/><path d="M8.8 9.2C8.2 6.6 9.5 5.4 12 5.4s3.8 1.2 3.2 3.8"/><circle cx="10.5" cy="9.6" r="1"/><circle cx="13.5" cy="9.6" r="1"/><path d="M11.5 9.6h1"/><path d="M5.6 20c0-3.4 2.9-5.7 6.4-5.7s6.4 2.3 6.4 5.7"/>`,
+  elder_man: `<circle cx="12" cy="9.4" r="3.2"/><path d="M9 7.3C9.6 5.6 14.4 5.6 15 7.3"/><circle cx="10.5" cy="9.5" r="1"/><circle cx="13.5" cy="9.5" r="1"/><path d="M11.5 9.5h1"/><path d="M10.4 11.6c.9.5 2.3.5 3.2 0"/><path d="M5.6 20c0-3.4 2.9-5.7 6.4-5.7s6.4 2.3 6.4 5.7"/>`,
+  girl: `<circle cx="12" cy="9.8" r="3"/><circle cx="7.8" cy="10" r="1.6"/><circle cx="16.2" cy="10" r="1.6"/><path d="M9 7.4C9.6 5.8 14.4 5.8 15 7.4"/><path d="M6.8 20c0-3.1 2.4-5.2 5.2-5.2s5.2 2.1 5.2 5.2"/>`,
+  boy: `<circle cx="12" cy="9.8" r="3"/><path d="M10 7 12 5.4l2 1.6"/><path d="M9.1 7.7h5.8"/><path d="M6.8 20c0-3.1 2.4-5.2 5.2-5.2s5.2 2.1 5.2 5.2"/>`,
+  couple: `<circle cx="8.3" cy="9.8" r="2.6"/><circle cx="15.7" cy="9.8" r="2.6"/><path d="M3.8 20c0-2.9 2-4.8 4.5-4.8s4.5 1.9 4.5 4.8"/><path d="M11.2 20c0-2.9 2-4.8 4.5-4.8s4.5 1.9 4.5 4.8"/><path d="M12 3.8c.8-1 2.2-.3 1.8.8-.2.6-1.8 1.5-1.8 1.5s-1.6-.9-1.8-1.5C9.8 3.5 11.2 2.8 12 3.8z" fill="currentColor" stroke="none"/>`,
   music: `<path d="M9 18V6l9-2v12"/><circle cx="7" cy="18" r="2"/><circle cx="16" cy="16" r="2"/>`,
   book: `<path d="M12 6.5C10.5 5 8 4.5 4.5 5v13C8 17.5 10.5 18 12 19.5"/><path d="M12 6.5C13.5 5 16 4.5 19.5 5v13C16 17.5 13.5 18 12 19.5"/><line x1="12" y1="6.5" x2="12" y2="19.5"/>`,
   cake: `<line x1="3.5" y1="20.5" x2="20.5" y2="20.5"/><path d="M5.5 20.5v-7c0-1 .8-1.8 1.8-1.8h9.4c1 0 1.8.8 1.8 1.8v7"/><path d="M5.5 15c1.3 1.3 2.8 1.3 4 0s2.8-1.3 4 0 2.8 1.3 4 0"/><line x1="12" y1="7" x2="12" y2="11"/>`,
@@ -59,6 +59,11 @@ const OCCASION_ICON = {
 // アバター選択肢（人の登録で選ぶ）
 const AVATARS = ["woman","man","elder_woman","elder_man","person","girl","boy","couple",
   "music","book","tea","flower","cake","cat","star","gift"];
+const AVATAR_LABELS = {
+  woman:"女性/母", man:"男性/父", elder_woman:"祖母", elder_man:"祖父", person:"ひと",
+  girl:"女の子", boy:"男の子", couple:"カップル", music:"音楽", book:"読書", tea:"お茶",
+  flower:"花", cake:"スイーツ", cat:"ネコ", star:"スター", gift:"ギフト",
+};
 
 function icon(key, size = 24){
   const body = SVG_ICON_PATHS[key] || SVG_ICON_PATHS.gift;

@@ -257,6 +257,16 @@ def save_person(p: PersonIn):
     return store.upsert_person(data)   # 顔写真(photo_url)は無料でもOK
 
 
+class ReorderIn(BaseModel):
+    ids: list[str]
+
+
+@app.post("/api/people/reorder")
+def reorder_people(r: ReorderIn):
+    store.reorder_people(r.ids)
+    return {"ok": True}
+
+
 @app.delete("/api/people/{pid}")
 def remove_person(pid: str):
     store.delete_person(pid)

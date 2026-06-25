@@ -53,20 +53,14 @@
   <!-- 👪 人 -->
   <section id="view-people" class="hidden">
     <h1><span class="h-ico" data-icon="people"></span>贈る相手</h1>
-    <p class="sub">登録すると、提案がその人専用に育ちます。</p>
+    <p class="sub">登録すると、提案がその人専用に育ちます。ドラッグで並べ替え（左ほど大切な人）。</p>
     <div class="people-grid" id="people-grid"></div>
 
     <div id="person-detail" class="hidden">
-      <div class="panel">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div class="avatar" id="pd-avatar"></div>
-          <div style="flex:1">
-            <div style="font-weight:700;font-size:17px" id="pd-name"></div>
-            <div class="meta" id="pd-meta" style="color:var(--muted);font-size:13px"></div>
-          </div>
-          <button class="mini" id="pd-edit">編集</button>
-          <button class="mini" id="pd-del" style="color:#c0392b">削除</button>
-        </div>
+      <div class="panel" style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1;font-weight:800;font-size:16px;font-family:var(--serif)" id="pd-title"></div>
+        <button class="mini" id="pd-edit">編集</button>
+        <button class="mini" id="pd-del" style="color:#c0392b">削除</button>
       </div>
       <div class="panel">
         <h2 style="font-size:15px;margin:0 0 8px"><span class="h-ico" data-icon="calendar" data-size="18"></span>一回きりの予定（出産祝いなど）</h2>

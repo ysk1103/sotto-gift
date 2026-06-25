@@ -67,6 +67,15 @@ def upsert_person(person: dict) -> dict:
     return person
 
 
+def reorder_people(ids: list[str]) -> None:
+    """idsの順に並べ替える（左＝大切な人）。idsに無い人は末尾に。"""
+    with _lock:
+        data = _load()
+        order = {pid: i for i, pid in enumerate(ids)}
+        data["people"].sort(key=lambda p: order.get(p["id"], 10**9))
+        _save(data)
+
+
 def delete_person(pid: str) -> None:
     with _lock:
         data = _load()

@@ -160,6 +160,8 @@ body.theme-dark .lock-ov{background:rgba(20,18,26,.45);}
   box-shadow:var(--shadow-sm);border:2px solid var(--line);transition:.15s;}
 .person:hover{transform:translateY(-2px);box-shadow:var(--shadow);}
 .person.sel{border-color:var(--accent);}
+.person{cursor:grab;}
+.person.dragging{opacity:.45;}
 .avatar{width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-size:32px;margin:0 auto 9px;}
 .person .name{font-weight:800;font-size:15px;}

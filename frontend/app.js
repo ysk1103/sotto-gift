@@ -432,7 +432,7 @@ function renderPlan(p){
 function renderPeopleGrid(){
   const grid = document.getElementById("people-grid");
   grid.innerHTML = people.map(p => `
-    <div class="person ${p.id===selectedPersonId?'sel':''}" data-id="${p.id}">
+    <div class="person ${p.id===selectedPersonId?'sel':''}" data-id="${p.id}" draggable="true">
       <div class="avatar" style="background:${p.color}22;color:${p.color}">${avatarHTML(p,p.photo_url?56:36)}</div>
       <div class="name">${esc(displayName(p))}</div>
       <div class="meta">${RELATIONS[p.relation]||p.relation}・${p.age_band}</div>
@@ -442,14 +442,36 @@ function renderPeopleGrid(){
       ].filter(Boolean).join(" ")}</div>
     </div>`).join("") +
     `<div class="add-person" id="add-person">＋ 人を登録</div>`;
-  grid.querySelectorAll(".person").forEach(el =>
-    el.onclick = () => selectPerson(el.dataset.id));
-  document.getElementById("add-person").onclick = () => {
-    if (!isSubscribed && people.length >= freePeopleLimit){
-      openUpsell(`無料会員は${freePeopleLimit}人まで。プレミアムで無制限に登録できます。`); return;
-    }
-    openPersonForm(null);
-  };
+  let dragId = null;
+  grid.querySelectorAll(".person").forEach(el => {
+    el.onclick = () => { if (!el.classList.contains("was-dragged")) selectPerson(el.dataset.id); };
+    el.addEventListener("dragstart", () => { dragId = el.dataset.id; el.classList.add("dragging"); });
+    el.addEventListener("dragend", () => { el.classList.remove("dragging");
+      setTimeout(() => el.classList.remove("was-dragged"), 50); });
+    el.addEventListener("dragover", e => e.preventDefault());
+    el.addEventListener("drop", e => {
+      e.preventDefault();
+      el.classList.add("was-dragged");            // ドロップ直後の誤クリック選択を抑止
+      if (dragId && dragId !== el.dataset.id) reorderPeople(dragId, el.dataset.id);
+    });
+  });
+  document.getElementById("add-person").onclick = addPerson;
+}
+
+async function reorderPeople(dragId, targetId){
+  const ids = people.map(p => p.id);
+  const from = ids.indexOf(dragId), to = ids.indexOf(targetId);
+  if (from < 0 || to < 0) return;
+  ids.splice(to, 0, ids.splice(from, 1)[0]);      // ドラッグした人を相手の位置へ挿入
+  await api.post("/api/people/reorder", {ids});
+  await loadPeople();
+}
+
+function addPerson(){
+  if (!isSubscribed && people.length >= freePeopleLimit){
+    openUpsell(`無料会員は${freePeopleLimit}人まで。プレミアムで無制限に登録できます。`); return;
+  }
+  openPersonForm(null);
 }
 
 function currentPerson(){ return people.find(p => p.id === selectedPersonId); }
@@ -474,15 +496,7 @@ async function selectPerson(id){
   renderPeopleGrid();
   const p = currentPerson();
   document.getElementById("person-detail").classList.remove("hidden");
-  document.getElementById("pd-avatar").innerHTML = avatarHTML(p, p.photo_url?48:32);
-  document.getElementById("pd-avatar").style.background = p.color+"22";
-  document.getElementById("pd-avatar").style.color = p.color;
-  document.getElementById("pd-name").textContent = displayName(p);
-  document.getElementById("pd-meta").textContent =
-    `${RELATIONS[p.relation]||p.relation}・${p.age_band}`
-    + (p.birthday?("・誕生日"+fmtMD(p.birthday)):"")
-    + (p.anniversary?("・記念日"+fmtMD(p.anniversary)):"")
-    + (p.notes?`　／　${p.notes}`:"");
+  document.getElementById("pd-title").textContent = `${displayName(p)}さんの予定・記録`;
   await renderOccasions();
   await renderEvents();
 }
@@ -592,7 +606,7 @@ function openPersonForm(p){
     <input class="ev-photo-input" id="f-photo" type="file" accept="image/*" />
     <div id="f-photo-preview">${e.photo_url?`<img src="${e.photo_url}" style="margin-top:8px;width:72px;height:72px;border-radius:50%;object-fit:cover" />`:""}</div>
     <label style="margin-top:8px">アイコン（写真が無い時に表示）</label>
-    <div class="icon-pick" id="f-icons">${ICONS.map(i=>`<span class="${i===e.icon?"sel":""}" data-i="${i}">${icon(i,22)}</span>`).join("")}</div>
+    <div class="icon-pick" id="f-icons">${ICONS.map(i=>`<span class="${i===e.icon?"sel":""}" data-i="${i}" title="${(typeof AVATAR_LABELS!=='undefined'&&AVATAR_LABELS[i])||i}">${icon(i,22)}</span>`).join("")}</div>
     <label>色</label>
     <div class="color-pick" id="f-colors">${COLORS.map(c=>`<span class="${c===e.color?"sel":""}" data-c="${c}" style="background:${c}"></span>`).join("")}</div>
     <label>メモ（好きなこと・最近こぼしてたこと）</label>
@@ -612,7 +626,7 @@ function openPersonForm(p){
   document.getElementById("f-rel").onchange = toggleGender;
   toggleGender();
 
-  let icon=e.icon, color=e.color, photoData=e.photo_url||"";
+  let pickedIcon=e.icon, color=e.color, photoData=e.photo_url||"";   // ローカル名はグローバルicon()と衝突させない
   document.getElementById("f-photo").onchange = (ev) => {
     const f = ev.target.files[0]; if (!f) return;
     resizeImage(f, 512, (d) => {
@@ -622,7 +636,7 @@ function openPersonForm(p){
     });
   };
   document.querySelectorAll("#f-icons span").forEach(s => s.onclick = () => {
-    icon=s.dataset.i; document.querySelectorAll("#f-icons span").forEach(x=>x.classList.remove("sel")); s.classList.add("sel");
+    pickedIcon=s.dataset.i; document.querySelectorAll("#f-icons span").forEach(x=>x.classList.remove("sel")); s.classList.add("sel");
   });
   document.querySelectorAll("#f-colors span").forEach(s => s.onclick = () => {
     color=s.dataset.c; document.querySelectorAll("#f-colors span").forEach(x=>x.classList.remove("sel")); s.classList.add("sel");
@@ -638,7 +652,7 @@ function openPersonForm(p){
       age_band: document.getElementById("f-age").value,
       birthday: document.getElementById("f-bday").value,
       anniversary: document.getElementById("f-anniv").value,
-      icon, color, photo_url: photoData,
+      icon: pickedIcon, color, photo_url: photoData,
       notes: document.getElementById("f-notes").value,
       avoid: splitCsv(document.getElementById("f-avoid").value),
       likes: e.likes||[],
