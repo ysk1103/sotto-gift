@@ -29,7 +29,7 @@ const ICONS = AVATARS;   // icons.js のSVGアバターキー
 const COLORS = ["#e8638c","#5b8def","#36b37e","#9b59b6","#f39c12","#16a5a5"];
 const TYPE_LABEL = {buy:"買えるもの",experience:"体験",make:"手作り"};
 // 一回きりの予定の選択肢（手打ちは「その他」のみ）
-const ONE_TIME_OCCASIONS = ["出産祝い","結婚祝い","新築・引っ越し祝い","就職祝い","入学祝い","卒業祝い","還暦祝い","開店・開業祝い","その他"];
+const ONE_TIME_OCCASIONS = ["結婚祝い","出産祝い","新築・引っ越し祝い","就職祝い","入学祝い","卒業祝い","還暦祝い","開店・開業祝い","その他"];
 
 // ===== 状態 =====
 let people = [];
@@ -520,7 +520,7 @@ async function renderOccasions(){
 function openOccasionForm(){
   modal(`
     <h2 style="display:flex;align-items:center;gap:8px">${icon("calendar",20)} 予定を追加</h2>
-    <p class="sub">出産祝いなどの一回きりの予定。選択肢から選べます（自由入力は「その他」）。</p>
+    <p class="sub">結婚祝いなどの一回きりの予定。選択肢から選べます（自由入力は「その他」）。</p>
     <label>種類</label>
     <select id="oc-label">${ONE_TIME_OCCASIONS.map(o=>`<option>${o}</option>`).join("")}</select>
     <div id="oc-custom-wrap" class="hidden">
