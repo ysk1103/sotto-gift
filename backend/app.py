@@ -132,6 +132,20 @@ def auth_me(request: Request):
             "email": (u or {}).get("email", ""), "name": (u or {}).get("name", "")}
 
 
+@app.get("/api/auth/debug")
+def auth_debug():
+    """診断用（一時）：google-auth導入と設定の状態を返す。ログイン不要。"""
+    out = {"client_id_set": bool(GOOGLE_CLIENT_ID), "client_id_tail": GOOGLE_CLIENT_ID[-24:],
+           "auth_required": AUTH_REQUIRED, "session_secret_set": SESSION_SECRET != "dev-insecure-secret-change-me"}
+    try:
+        from google.oauth2 import id_token  # noqa
+        from google.auth.transport import requests as g_requests  # noqa
+        out["google_auth"] = "ok"
+    except Exception as e:
+        out["google_auth"] = f"MISSING: {e!r}"
+    return out
+
+
 @app.post("/api/auth/logout")
 def auth_logout():
     resp = JSONResponse({"ok": True})
