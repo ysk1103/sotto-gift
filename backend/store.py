@@ -221,6 +221,16 @@ def set_subscribed(value: bool) -> dict:
         return data["settings"]
 
 
+def delete_user(uid: str) -> None:
+    """ユーザーの全データを削除（アカウント削除）。"""
+    if _DATABASE_URL:
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM appstate WHERE id=%s", (uid,))
+        return
+    if _STORE.exists():        # ローカル(単一JSON)は初期化
+        _STORE.unlink()
+
+
 def set_subscription(uid: str, subscribed: bool, customer_id: str | None = None) -> None:
     """Stripe Webhookから、指定ユーザーの会員状態を更新（ログインセッション外から呼ぶ）。"""
     token = _current_user.set(uid)
