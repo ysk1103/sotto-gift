@@ -1,7 +1,7 @@
 // そっとぎふと Service Worker。
 // 役割：①インストール可能にする ②アプリの外枠(シェル)をキャッシュしてオフラインでも開く。
 // 商品データ(/api/)は鮮度が命なので絶対にキャッシュせず、常にネットワークへ。
-const CACHE = "okurimono-v24";
+const CACHE = "okurimono-v25";
 const SHELL = [
   "/", "/index.html", "/styles.css", "/app.js", "/icons.js", "/holidays.js",
   "/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png",
