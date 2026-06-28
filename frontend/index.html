@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="そっとぎふと" />
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <div class="wrap">
@@ -116,6 +117,17 @@
   <button data-view="people"><span class="ico" data-icon="people"></span>人</button>
   <button data-view="cal"><span class="ico" data-icon="calendar"></span>カレンダー</button>
 </nav>
+
+<!-- ログイン画面（要ログイン時のみ表示） -->
+<div id="login-screen" class="hidden">
+  <div class="login-card">
+    <div class="login-logo">そっとぎふと</div>
+    <div class="login-tag">そっと寄り添う、贈りもの選び</div>
+    <p class="login-msg">続けるにはログインしてください</p>
+    <div id="gbtn"></div>
+    <p class="login-note">あなたの登録データはあなただけのものになります。</p>
+  </div>
+</div>
 
 <div id="modal-root"></div>
 
