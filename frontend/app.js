@@ -222,7 +222,22 @@ async function loadSettings(){
   renderAds();
 }
 function renderAds(){
-  document.getElementById("ad-banner").classList.toggle("hidden", isSubscribed);
+  const el = document.getElementById("ad-banner");
+  el.classList.toggle("hidden", isSubscribed);
+  if (isSubscribed) return;                       // 有料は広告なし
+  api.get("/api/ad").then(a => {
+    if (a && a.url){
+      el.innerHTML = `<span class="ad-tag">PR</span>
+        <a class="ad-link" href="${a.url}" target="_blank" rel="noopener">
+          <img src="${a.image_url}" alt="" />
+          <span class="ad-body">
+            <span class="ad-name">${esc(a.name)}</span>
+            <span class="ad-price">¥${(a.price||0).toLocaleString()}　<span class="ad-src">${esc(a.source||"")}</span></span>
+          </span>
+          <span class="ad-go">見る →</span>
+        </a>`;
+    }
+  }).catch(()=>{});
 }
 async function subscribe(){
   await api.post("/api/settings", {subscribed: true});
