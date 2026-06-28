@@ -221,6 +221,19 @@ def set_subscribed(value: bool) -> dict:
         return data["settings"]
 
 
+def set_subscription(uid: str, subscribed: bool, customer_id: str | None = None) -> None:
+    """Stripe Webhookから、指定ユーザーの会員状態を更新（ログインセッション外から呼ぶ）。"""
+    token = _current_user.set(uid)
+    try:
+        data = _load()
+        data["settings"]["subscribed"] = bool(subscribed)
+        if customer_id:
+            data["settings"]["stripe_customer_id"] = customer_id
+        _save(data)
+    finally:
+        _current_user.reset(token)
+
+
 _ALLOWED_SETTINGS = {"subscribed", "tone", "default_budget_min", "default_budget_max"}
 
 
