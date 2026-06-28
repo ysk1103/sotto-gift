@@ -1,0 +1,28 @@
+# Render デプロイ設定（Blueprint）。Renderでこのリポジトリを選ぶと自動で読み込まれる。
+# 秘密の鍵は sync:false ＝ Renderの管理画面で各自入力（リポジトリには入れない）。
+services:
+  - type: web
+    name: sotto-gift
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: NARRATE_PROVIDER
+        value: claude
+      - key: DATABASE_URL          # Neonの接続文字列（恒久データ保存）
+        sync: false
+      - key: RAKUTEN_APP_ID
+        sync: false
+      - key: RAKUTEN_ACCESS_KEY
+        sync: false
+      - key: RAKUTEN_AFFILIATE_ID
+        sync: false
+      - key: YAHOO_APP_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
