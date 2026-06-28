@@ -87,7 +87,8 @@ def _read_session(request: Request) -> dict | None:
 def _verify_google(credential: str) -> dict:
     from google.oauth2 import id_token
     from google.auth.transport import requests as g_requests
-    info = id_token.verify_oauth2_token(credential, g_requests.Request(), GOOGLE_CLIENT_ID)
+    info = id_token.verify_oauth2_token(credential, g_requests.Request(), GOOGLE_CLIENT_ID,
+                                        clock_skew_in_seconds=10)
     return {"sub": info["sub"], "email": info.get("email", ""),
             "name": info.get("name", ""), "picture": info.get("picture", "")}
 
@@ -116,7 +117,7 @@ def auth_google(body: GoogleIn):
         user = _verify_google(body.credential)
     except Exception as e:
         print(f"[auth] Google検証失敗: {e}")
-        raise HTTPException(401, "Googleログインに失敗しました")
+        raise HTTPException(401, f"ログイン検証エラー: {e}")   # 診断用に原因を表示（後で簡素化）
     resp = JSONResponse({"email": user["email"], "name": user["name"]})
     resp.set_cookie("session", _make_session(user), httponly=True, secure=AUTH_REQUIRED,
                     samesite="lax", max_age=60 * 60 * 24 * _SESSION_DAYS, path="/")
