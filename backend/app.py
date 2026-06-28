@@ -20,12 +20,14 @@ import json as _json
 import os
 import random
 import re
+import secrets
 import time
+import urllib.parse
 from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -68,6 +70,10 @@ def _stripe():
     import stripe
     stripe.api_key = STRIPE_SECRET_KEY
     return stripe
+
+# LINEログイン
+LINE_CHANNEL_ID = os.getenv("LINE_CHANNEL_ID", "")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 
 
 def _make_session(user: dict) -> str:
@@ -139,7 +145,50 @@ def auth_google(body: GoogleIn):
 @app.get("/api/auth/me")
 def auth_me(request: Request):
     return {"authenticated": bool(request.state.user), "required": AUTH_REQUIRED,
-            "google_client_id": GOOGLE_CLIENT_ID}
+            "google_client_id": GOOGLE_CLIENT_ID, "line_enabled": bool(LINE_CHANNEL_ID)}
+
+
+# ---- LINEログイン（認可コードフロー）----
+@app.get("/api/auth/line/login")
+def line_login(request: Request):
+    if not LINE_CHANNEL_ID:
+        raise HTTPException(503, "LINEログインは未設定です")
+    state = secrets.token_urlsafe(16)
+    cb = str(request.base_url).rstrip("/") + "/api/auth/line/callback"
+    url = ("https://access.line.me/oauth2/v2.1/authorize?response_type=code"
+           f"&client_id={LINE_CHANNEL_ID}&redirect_uri={urllib.parse.quote(cb, safe='')}"
+           f"&state={state}&scope=profile%20openid")
+    resp = RedirectResponse(url, status_code=302)
+    resp.set_cookie("line_state", state, httponly=True, secure=AUTH_REQUIRED,
+                    samesite="lax", max_age=600, path="/")
+    return resp
+
+
+@app.get("/api/auth/line/callback")
+def line_callback(request: Request, code: str = "", state: str = ""):
+    if not code or not state or state != request.cookies.get("line_state"):
+        raise HTTPException(400, "認証に失敗しました")
+    import requests as rq
+    cb = str(request.base_url).rstrip("/") + "/api/auth/line/callback"
+    try:
+        tok = rq.post("https://api.line.me/oauth2/v2.1/token", timeout=15, data={
+            "grant_type": "authorization_code", "code": code, "redirect_uri": cb,
+            "client_id": LINE_CHANNEL_ID, "client_secret": LINE_CHANNEL_SECRET}).json()
+        idt = tok.get("id_token")
+        v = rq.post("https://api.line.me/oauth2/v2.1/verify", timeout=15, data={
+            "id_token": idt, "client_id": LINE_CHANNEL_ID}).json()
+        uid = v.get("sub")
+    except Exception as e:
+        print(f"[auth] LINE検証失敗: {e}")
+        uid = None
+    if not uid:
+        raise HTTPException(401, "LINEログインに失敗しました")
+    resp = RedirectResponse("/", status_code=302)
+    resp.set_cookie("session", _make_session({"sub": "line:" + uid}), httponly=True,
+                    secure=AUTH_REQUIRED, samesite="lax",
+                    max_age=60 * 60 * 24 * _SESSION_DAYS, path="/")
+    resp.delete_cookie("line_state", path="/")
+    return resp
 
 
 @app.post("/api/auth/logout")
