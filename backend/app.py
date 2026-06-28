@@ -467,6 +467,28 @@ def similar(req: SimilarIn):
     } for it in items]}
 
 
+import time as _time
+_ad_cache: dict = {"items": [], "ts": 0.0}
+
+
+@app.get("/api/ad")
+def ad():
+    """無料会員向けの広告枠＝実在の人気ギフト1点（アフィリリンク）。30分キャッシュでAPI負荷を抑制。"""
+    now = _time.time()
+    if not _ad_cache["items"] or now - _ad_cache["ts"] > 1800:
+        pool = [it for it in fetch_candidates(
+            SearchIntent(keywords=["人気", "ギフト"], budget_min=2000, budget_max=10000))
+            if it.in_stock and it.image_url and it.url]
+        _ad_cache["items"] = pool[:20]
+        _ad_cache["ts"] = now
+    pool = _ad_cache["items"]
+    if not pool:
+        return {}
+    it = random.choice(pool)
+    return {"name": it.title, "price": it.price, "image_url": it.image_url,
+            "url": it.url, "source": it.source}
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True, "rakuten_key": bool(os.getenv("RAKUTEN_APP_ID"))}
