@@ -54,6 +54,13 @@ const api = {
   del: (u) => fetch(u, {method:"DELETE"}).then(r => r.json()),
 };
 
+// Google Play(TWA)で起動したか。Playアプリ内ではアプリ内課金規約に抵触するため購入導線を出さない。
+let isAndroidApp = false;
+try {
+  if (document.referrer && document.referrer.indexOf("android-app://") === 0) localStorage.setItem("isTWA", "1");
+  isAndroidApp = localStorage.getItem("isTWA") === "1";
+} catch (e) {}
+
 // ===== テーマ（案B=light / 案D=dark） =====
 function applyTheme(t){ document.body.classList.toggle("theme-dark", t === "dark"); }
 function currentTheme(){ return localStorage.getItem("theme") || "light"; }
@@ -89,9 +96,11 @@ function openSettings(){
       <div style="flex:1"><div class="tn">${isSubscribed?"プレミアム会員":"無料会員"}</div>
         <div class="td">${isSubscribed?"広告なし・無制限・記録/写真・完成イメージOK":`広告あり・${freePeopleLimit}人まで・提案${freeVisible}件まで`}</div></div>
       ${authRequired
-        ? (isSubscribed
-            ? `<button class="ghost" id="sub-manage" style="margin:0">購読を管理</button>`
-            : `<button class="premium-btn" id="sub-go" style="margin:0">${icon("sparkle",15)}プレミアム（月¥480）</button>`)
+        ? (isAndroidApp
+            ? `<span class="td" style="text-align:right;max-width:120px">${isSubscribed?"プレミアム会員":"プレミアムはWeb版で"}</span>`
+            : (isSubscribed
+                ? `<button class="ghost" id="sub-manage" style="margin:0">購読を管理</button>`
+                : `<button class="premium-btn" id="sub-go" style="margin:0">${icon("sparkle",15)}プレミアム（月¥480）</button>`))
         : `<button class="ghost" id="sub-btn" style="margin:0">${isSubscribed?"無料に戻す":"プレミアムにする"}</button>`}
     </div>
     ${isLoggedIn?`<div style="margin-top:18px;text-align:center">
@@ -136,10 +145,19 @@ function openSettings(){
     await loadPeople();
     closeModal();
   };
-  const subGo = document.getElementById("sub-go");        // 本番：プレミアム購入
-  if (subGo) subGo.onclick = billingCheckout;
+  const subGo = document.getElementById("sub-go");        // 本番Web：プレミアム購入
+  if (subGo) subGo.onclick = goPremium;
   const subManage = document.getElementById("sub-manage"); // 本番：購読管理（解約等）
   if (subManage) subManage.onclick = billingManage;
+}
+// 課金の統一入口：ローカル=トグル／Androidアプリ=案内のみ／Web=Stripe決済
+function goPremium(){
+  if (!authRequired){ subscribe().then(()=>closeModal()); return; }   // ローカル開発
+  if (isAndroidApp){
+    alert("プレミアムのご登録は、ブラウザ（Chrome等）で sotto-gift.onrender.com を開いて行ってください。アプリ版では登録できません。");
+    return;
+  }
+  billingCheckout();
 }
 async function billingCheckout(){
   const r = await api.post("/api/billing/checkout", {});
@@ -372,11 +390,13 @@ function openUpsell(msg){
       <li>あげた／もらったを写真付きで記録</li>
       <li>広告なし</li>
     </ul>
+    ${isAndroidApp?`<p class="sub" style="text-align:center;margin:4px 0 0">プレミアムのご登録はブラウザ版（Chrome等）からお願いします。</p>`:""}
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">閉じる</button>
-      <button class="primary" style="margin:0" id="up-go">プレミアムにする（体験）</button>
+      ${isAndroidApp?"":`<button class="primary" style="margin:0" id="up-go">プレミアムにする</button>`}
     </div>`);
-  document.getElementById("up-go").onclick = async () => { await subscribe(); closeModal(); };
+  const up = document.getElementById("up-go");
+  if (up) up.onclick = goPremium;   // Web=Stripe / ローカル=トグル（本番の旧トグル無効化バグも解消）
 }
 
 // ===== 🔔 リマインド =====
