@@ -156,9 +156,9 @@ async function init(){
   document.getElementById("pd-add-occasion").onclick = () => openOccasionForm();
   document.getElementById("pd-edit").onclick = () => openPersonForm(currentPerson());
   document.getElementById("pd-del").onclick = deleteCurrentPerson;
-  await loadSettings();
-  await loadPeople();
-  await loadReminders();
+  try { await loadSettings(); } catch(e){ console.warn("settings失敗", e); }
+  try { await loadPeople(); } catch(e){ console.warn("people失敗", e); }
+  try { await loadReminders(); } catch(e){ console.warn("reminders失敗", e); }
 }
 
 // ===== 似た商品（同じジャンル）を5件 =====
