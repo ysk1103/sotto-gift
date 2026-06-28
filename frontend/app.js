@@ -2,7 +2,7 @@
 const RELATIONS = {mother:"母",father:"父",grandmother:"祖母",grandfather:"祖父",
   partner:"パートナー",friend:"友人",child:"子ども",grandchild:"孫",
   elder_brother:"兄",elder_sister:"姉",younger_brother:"弟",younger_sister:"妹",other:"その他"};
-const AGE_BANDS = ["10s","20s","30s","40s","50s","60s","70s","80s"];
+const AGE_BANDS = ["赤ちゃん","幼児","小学生","10s","20s","30s","40s","50s","60s","70s","80s"];
 // 予算スライダーの停止点：2000〜1万円は1000刻み、1万円超は5000刻みで10万まで。
 // 最上段(10万)は「10万円以上＝上限なし」扱い。
 const BUDGET_STEPS = (() => {
