@@ -13,15 +13,19 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
+import json as _json
 import os
 import random
 import re
+import time
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -48,7 +52,90 @@ def _load_dotenv():
 
 _load_dotenv()
 
-app = FastAPI(title="プレゼント提案エンジン")
+# ============================ 認証（Googleログイン） ============================
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-secret-change-me")
+AUTH_REQUIRED = os.getenv("AUTH_REQUIRED") == "1"     # 本番=1。ローカルは未設定＝ログイン不要
+_SESSION_DAYS = 30
+
+
+def _make_session(user: dict) -> str:
+    payload = {"sub": user["sub"], "email": user.get("email", ""), "name": user.get("name", ""),
+               "exp": int(time.time()) + 60 * 60 * 24 * _SESSION_DAYS}
+    raw = base64.urlsafe_b64encode(_json.dumps(payload).encode()).decode().rstrip("=")
+    sig = hmac.new(SESSION_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
+    return raw + "." + sig
+
+
+def _read_session(request: Request) -> dict | None:
+    tok = request.cookies.get("session")
+    if not tok or "." not in tok:
+        return None
+    raw, sig = tok.rsplit(".", 1)
+    expect = hmac.new(SESSION_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expect):
+        return None
+    try:
+        payload = _json.loads(base64.urlsafe_b64decode(raw + "=="))
+    except Exception:
+        return None
+    if payload.get("exp", 0) < time.time():
+        return None
+    return payload
+
+
+def _verify_google(credential: str) -> dict:
+    from google.oauth2 import id_token
+    from google.auth.transport import requests as g_requests
+    info = id_token.verify_oauth2_token(credential, g_requests.Request(), GOOGLE_CLIENT_ID)
+    return {"sub": info["sub"], "email": info.get("email", ""),
+            "name": info.get("name", ""), "picture": info.get("picture", "")}
+
+
+def auth_ctx(request: Request):
+    """全APIの前に実行：セッションからユーザーを特定し、保存層をその人に切替＋必要なら拒否。"""
+    user = _read_session(request)
+    store.set_current_user(user["sub"] if user else None)
+    request.state.user = user
+    if AUTH_REQUIRED:
+        p = request.url.path
+        if p.startswith("/api/") and not p.startswith("/api/auth/") and not user:
+            raise HTTPException(401, "ログインが必要です")
+
+
+app = FastAPI(title="プレゼント提案エンジン", dependencies=[Depends(auth_ctx)])
+
+
+class GoogleIn(BaseModel):
+    credential: str
+
+
+@app.post("/api/auth/google")
+def auth_google(body: GoogleIn):
+    try:
+        user = _verify_google(body.credential)
+    except Exception as e:
+        print(f"[auth] Google検証失敗: {e}")
+        raise HTTPException(401, "Googleログインに失敗しました")
+    resp = JSONResponse({"email": user["email"], "name": user["name"]})
+    resp.set_cookie("session", _make_session(user), httponly=True, secure=AUTH_REQUIRED,
+                    samesite="lax", max_age=60 * 60 * 24 * _SESSION_DAYS, path="/")
+    return resp
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    u = request.state.user
+    return {"authenticated": bool(u), "required": AUTH_REQUIRED,
+            "google_client_id": GOOGLE_CLIENT_ID,
+            "email": (u or {}).get("email", ""), "name": (u or {}).get("name", "")}
+
+
+@app.post("/api/auth/logout")
+def auth_logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("session", path="/")
+    return resp
 
 
 @app.middleware("http")
