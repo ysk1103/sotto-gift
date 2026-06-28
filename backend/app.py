@@ -117,7 +117,7 @@ def auth_google(body: GoogleIn):
         user = _verify_google(body.credential)
     except Exception as e:
         print(f"[auth] Google検証失敗: {e}")
-        raise HTTPException(401, f"ログイン検証エラー: {e}")   # 診断用に原因を表示（後で簡素化）
+        raise HTTPException(401, "Googleログインに失敗しました")
     resp = JSONResponse({"email": user["email"], "name": user["name"]})
     resp.set_cookie("session", _make_session(user), httponly=True, secure=AUTH_REQUIRED,
                     samesite="lax", max_age=60 * 60 * 24 * _SESSION_DAYS, path="/")
@@ -130,20 +130,6 @@ def auth_me(request: Request):
     return {"authenticated": bool(u), "required": AUTH_REQUIRED,
             "google_client_id": GOOGLE_CLIENT_ID,
             "email": (u or {}).get("email", ""), "name": (u or {}).get("name", "")}
-
-
-@app.get("/api/auth/debug")
-def auth_debug():
-    """診断用（一時）：google-auth導入と設定の状態を返す。ログイン不要。"""
-    out = {"client_id_set": bool(GOOGLE_CLIENT_ID), "client_id_tail": GOOGLE_CLIENT_ID[-24:],
-           "auth_required": AUTH_REQUIRED, "session_secret_set": SESSION_SECRET != "dev-insecure-secret-change-me"}
-    try:
-        from google.oauth2 import id_token  # noqa
-        from google.auth.transport import requests as g_requests  # noqa
-        out["google_auth"] = "ok"
-    except Exception as e:
-        out["google_auth"] = f"MISSING: {e!r}"
-    return out
 
 
 @app.post("/api/auth/logout")
