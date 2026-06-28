@@ -83,12 +83,16 @@ function openSettings(){
       <div><select id="set-bmax">${budgetOptions(defaultBudget.max||8000,true)}</select></div>
     </div>
 
-    <label style="margin-top:16px">会員（動作確認用トグル）</label>
+    <label style="margin-top:16px">会員</label>
     <div class="theme-opt" id="sub-row">
       <div class="sw" style="background:linear-gradient(135deg,#cda46a,#b58a48)"></div>
       <div style="flex:1"><div class="tn">${isSubscribed?"プレミアム会員":"無料会員"}</div>
-        <div class="td">${isSubscribed?"広告なし・無制限・記録/写真OK":`広告あり・${freePeopleLimit}人まで・提案${freeVisible}件まで`}</div></div>
-      <button class="ghost" id="sub-btn" style="margin:0">${isSubscribed?"無料に戻す":"プレミアムにする"}</button>
+        <div class="td">${isSubscribed?"広告なし・無制限・記録/写真・完成イメージOK":`広告あり・${freePeopleLimit}人まで・提案${freeVisible}件まで`}</div></div>
+      ${authRequired
+        ? (isSubscribed
+            ? `<button class="ghost" id="sub-manage" style="margin:0">購読を管理</button>`
+            : `<button class="premium-btn" id="sub-go" style="margin:0">${icon("sparkle",15)}プレミアム（月¥480）</button>`)
+        : `<button class="ghost" id="sub-btn" style="margin:0">${isSubscribed?"無料に戻す":"プレミアムにする"}</button>`}
     </div>
     ${isLoggedIn?`<div style="margin-top:18px;text-align:center"><button class="ghost" id="set-logout">ログアウト</button></div>`:""}
     <div class="modal-actions"><button class="ghost" onclick="closeModal()">閉じる</button></div>`);
@@ -115,13 +119,28 @@ function openSettings(){
   };
   document.getElementById("set-bmin").onchange = saveDefaultBudget;
   document.getElementById("set-bmax").onchange = saveDefaultBudget;
-  document.getElementById("sub-btn").onclick = async () => {
+  const subBtn = document.getElementById("sub-btn");      // ローカル開発用トグルのみ
+  if (subBtn) subBtn.onclick = async () => {
     await api.post("/api/settings", {subscribed: !isSubscribed});
     isSubscribed = !isSubscribed;
     renderAds();
     await loadPeople();
     closeModal();
   };
+  const subGo = document.getElementById("sub-go");        // 本番：プレミアム購入
+  if (subGo) subGo.onclick = billingCheckout;
+  const subManage = document.getElementById("sub-manage"); // 本番：購読管理（解約等）
+  if (subManage) subManage.onclick = billingManage;
+}
+async function billingCheckout(){
+  const r = await api.post("/api/billing/checkout", {});
+  if (r && r.url) location.href = r.url;
+  else alert((r && r.detail) || "決済ページを開けませんでした");
+}
+async function billingManage(){
+  const r = await api.post("/api/billing/portal", {});
+  if (r && r.url) location.href = r.url;
+  else alert((r && r.detail) || "管理ページを開けませんでした");
 }
 
 // 予算ドロップダウンの選択肢（上限側は最上段を「上限なし」に）
@@ -143,6 +162,7 @@ async function boot(){
   try { me = await api.get("/api/auth/me"); } catch(e){ me = {required:false, authenticated:true}; }
   if (me.required && !me.authenticated){ showLogin(me.google_client_id); return; }
   isLoggedIn = !!me.authenticated;
+  authRequired = !!me.required;
   init();
 }
 function showLogin(clientId){
@@ -166,6 +186,7 @@ async function logout(){
   location.reload();
 }
 let isLoggedIn = false;
+let authRequired = false;
 async function init(){
   document.querySelectorAll("[data-icon]").forEach(el => el.innerHTML = icon(el.dataset.icon, +el.dataset.size || 24));
   setupPWA();
@@ -191,6 +212,12 @@ async function init(){
   try { await loadSettings(); } catch(e){ console.warn("settings失敗", e); }
   try { await loadPeople(); } catch(e){ console.warn("people失敗", e); }
   try { await loadReminders(); } catch(e){ console.warn("reminders失敗", e); }
+  // Stripe決済から戻ってきた直後（?premium=1）：会員状態を取り直してお礼
+  if (new URLSearchParams(location.search).get("premium") === "1"){
+    history.replaceState({}, "", location.pathname);
+    try { await loadSettings(); } catch(e){}
+    alert("プレミアムにご登録ありがとうございます！反映に少し時間がかかる場合があります。");
+  }
 }
 
 // ===== 似た商品（同じジャンル）を5件 =====
