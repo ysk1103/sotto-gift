@@ -198,6 +198,27 @@ def auth_logout():
     return resp
 
 
+@app.post("/api/account/delete")
+def account_delete(request: Request):
+    """アカウント削除：購読を解約し、ユーザーの全データを消去（ストア審査要件）。"""
+    user = request.state.user
+    if not user:
+        raise HTTPException(401, "ログインが必要です")
+    cust = store.get_settings().get("stripe_customer_id")
+    if cust and STRIPE_SECRET_KEY:
+        try:
+            s = _stripe()
+            for sub in s.Subscription.list(customer=cust, status="all").auto_paging_iter():
+                if sub.status in ("active", "trialing", "past_due"):
+                    s.Subscription.cancel(sub.id)
+        except Exception as e:
+            print(f"[account] Stripe解約失敗: {e}")
+    store.delete_user(user["sub"])
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("session", path="/")
+    return resp
+
+
 # ============================ 課金（Stripe） ============================
 @app.post("/api/billing/checkout")
 def billing_checkout(request: Request):
