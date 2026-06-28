@@ -159,7 +159,7 @@ function showLogin(clientId){
 async function onGoogleCredential(resp){
   const r = await api.post("/api/auth/google", { credential: resp.credential });
   if (r && !r.detail){ location.reload(); }   // ログイン成功→再起動でアプリへ
-  else { alert("ログインに失敗しました。もう一度お試しください。"); }
+  else { alert((r && r.detail) || "ログインに失敗しました。もう一度お試しください。"); }
 }
 async function logout(){
   await api.post("/api/auth/logout", {});
