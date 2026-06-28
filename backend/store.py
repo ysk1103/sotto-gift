@@ -25,7 +25,11 @@ def _load() -> dict:
     data.setdefault("events", [])
     data.setdefault("occasions", [])
     data.setdefault("shown", {})       # {person_id: [過去に提案した品名, ...]（新しい順）}
-    data.setdefault("settings", {"subscribed": False})   # 有料サブスク状態（暫定フラグ）
+    s = data.setdefault("settings", {})                   # アプリ設定
+    s.setdefault("subscribed", False)                     # 有料サブスク状態（暫定フラグ）
+    s.setdefault("tone", "warm")                          # 提案の語り口（warm/plain/polite）
+    s.setdefault("default_budget_min", 0)                 # デフォルト予算（0=未設定）
+    s.setdefault("default_budget_max", 0)
     data.setdefault("usage", {"date": "", "count": 0})    # 無料の1日提案回数（コスト防衛）
     data.setdefault("memos", {})       # {"YYYY-MM-DD": メモ本文}
     return data
@@ -165,6 +169,20 @@ def set_subscribed(value: bool) -> dict:
     with _lock:
         data = _load()
         data["settings"]["subscribed"] = bool(value)
+        _save(data)
+        return data["settings"]
+
+
+_ALLOWED_SETTINGS = {"subscribed", "tone", "default_budget_min", "default_budget_max"}
+
+
+def update_settings(patch: dict) -> dict:
+    """設定を部分更新（許可キーのみ）。会員・語り口・デフォルト予算など。"""
+    with _lock:
+        data = _load()
+        for k, v in patch.items():
+            if k in _ALLOWED_SETTINGS:
+                data["settings"][k] = v
         _save(data)
         return data["settings"]
 

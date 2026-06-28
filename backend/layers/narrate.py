@@ -22,6 +22,17 @@ from ..models import Item, RecipientProfile, SuggestionCard
 CLAUDE_MODEL_DEFAULT = "claude-haiku-4-5"          # コスト配慮で既定Haiku
 GEMINI_MODEL_DEFAULT = "gemini-2.5-flash-lite"     # 無料枠で動く最安級・高速
 
+# 提案の語り口（設定で切替）。LLMのシステム指示に足す一文。
+TONE_INSTRUCTIONS = {
+    "warm": "口調はやわらかく、親しい人にそっと薦めるような温かい話し言葉で。",
+    "plain": "口調はさっぱり簡潔に。要点だけを短く、飾らずに伝える。",
+    "polite": "口調はていねいな敬体（です・ます）で、落ち着いた上品な言葉づかいで。",
+}
+
+
+def _tone_text(tone: str) -> str:
+    return TONE_INSTRUCTIONS.get(tone, TONE_INSTRUCTIONS["warm"])
+
 
 def _evidence(it: Item) -> list[str]:
     # 価格はカード専用フィールド(price/list_price)で大きく出すので、ここには入れない
@@ -44,7 +55,7 @@ def _card(it: Item, reason: str) -> SuggestionCard:
     return SuggestionCard(
         name=it.title, type=it.type, reason=reason,
         evidence=_evidence(it), url=it.url, image_url=it.image_url,
-        price=it.price, list_price=it.list_price,
+        price=it.price, list_price=it.list_price, source=it.source, genre_id=it.genre_id,
     )
 
 
@@ -79,7 +90,7 @@ _SYSTEM = (
 
 
 class Narrator:
-    def narrate(self, profile: RecipientProfile, items: list[Item]) -> list[SuggestionCard]:
+    def narrate(self, profile: RecipientProfile, items: list[Item], tone: str = "warm") -> list[SuggestionCard]:
         raise NotImplementedError
 
 
@@ -94,7 +105,7 @@ class TemplateNarrator(Narrator):
             return f"{hook}モノより一緒の時間を贈る案です。{ev[0]}と評価も安定しています。"
         return f"{hook}{it.description}{ev[0]}と裏付けもあります。"
 
-    def narrate(self, profile: RecipientProfile, items: list[Item]) -> list[SuggestionCard]:
+    def narrate(self, profile: RecipientProfile, items: list[Item], tone: str = "warm") -> list[SuggestionCard]:
         return [_card(it, self._reason(it, profile)) for it in items]
 
 
@@ -118,14 +129,14 @@ class ClaudeNarrator(Narrator):
     def __init__(self, model: str | None = None):
         self.model = model or os.getenv("ANTHROPIC_MODEL", CLAUDE_MODEL_DEFAULT)
 
-    def narrate(self, profile, items):
+    def narrate(self, profile, items, tone="warm"):
         if not items:
             return []
         try:
             import anthropic
             client = anthropic.Anthropic()
             resp = client.messages.create(
-                model=self.model, max_tokens=1500, system=_SYSTEM,
+                model=self.model, max_tokens=1500, system=_SYSTEM + " " + _tone_text(tone),
                 messages=[{"role": "user", "content": json.dumps(_build_payload(profile, items), ensure_ascii=False)}],
                 output_config={"format": {"type": "json_schema", "schema": _CLAUDE_SCHEMA}},
             )
@@ -133,7 +144,7 @@ class ClaudeNarrator(Narrator):
             reasons = {r["index"]: r["reason"] for r in json.loads(text)["reasons"]}
         except Exception as e:
             print(f"[narrate] Claude失敗→テンプレで継続: {e}")
-            return TemplateNarrator().narrate(profile, items)
+            return TemplateNarrator().narrate(profile, items, tone)
         return _apply(profile, items, reasons)
 
 
@@ -152,7 +163,7 @@ class GeminiNarrator(Narrator):
     def __init__(self, model: str | None = None):
         self.model = model or os.getenv("GEMINI_MODEL", GEMINI_MODEL_DEFAULT)
 
-    def narrate(self, profile, items):
+    def narrate(self, profile, items, tone="warm"):
         if not items:
             return []
         try:
@@ -160,7 +171,7 @@ class GeminiNarrator(Narrator):
             url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                    f"{self.model}:generateContent?key={key}")
             body = {
-                "systemInstruction": {"parts": [{"text": _SYSTEM}]},
+                "systemInstruction": {"parts": [{"text": _SYSTEM + " " + _tone_text(tone)}]},
                 "contents": [{"parts": [{"text": json.dumps(_build_payload(profile, items), ensure_ascii=False)}]}],
                 "generationConfig": {"responseMimeType": "application/json", "responseSchema": _GEMINI_SCHEMA},
             }
@@ -180,7 +191,7 @@ class GeminiNarrator(Narrator):
             reasons = {r["index"]: r["reason"] for r in json.loads(text)["reasons"]}
         except Exception as e:
             print(f"[narrate] Gemini失敗→テンプレで継続: {e}")
-            return TemplateNarrator().narrate(profile, items)
+            return TemplateNarrator().narrate(profile, items, tone)
         return _apply(profile, items, reasons)
 
 

@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import random
 import re
@@ -27,9 +28,9 @@ from pydantic import BaseModel
 from datetime import date
 
 from . import store
-from .layers import handmade, reminders
+from .layers import handmade, reminders, imagegen
 from .layers.embed import attach_embeddings
-from .layers.acquire import fetch_candidates
+from .layers.acquire import fetch_candidates, fetch_similar
 from .layers.narrate import get_narrator
 from .layers.select import select
 from .models import RecipientProfile, SearchIntent, resolve_gender
@@ -155,7 +156,8 @@ def suggest(req: SuggestRequest):
     attach_embeddings(profile, candidates)                                 # Fit用ベクトル付与（失敗時は部分一致）
     selected, relax_level = select(candidates, profile, intent, gave_history, gave_categories, shown)  # ③
     items = [it for it, _s, _p in selected]
-    cards = get_narrator().narrate(profile, items)                         # ④
+    tone = store.get_settings().get("tone", "warm")                        # 語り口（設定）
+    cards = get_narrator().narrate(profile, items, tone)                   # ④
 
     if req.person_id and items:                                            # 出した物を記録→次回は別の顔ぶれ
         store.push_shown(req.person_id, [it.title for it in items])
@@ -194,6 +196,8 @@ class HandmadeRequest(BaseModel):
     person_id: str | None = None
     free_text: str = ""
     want: str = ""          # 作りたいものが決まっていれば
+    answers: str = ""       # 「一緒に決めたいこと」への答え／希望
+    finalize: bool = False  # True＝質問は飛ばして材料・手順まで具体化する
 
 
 def _profile_only(req: HandmadeRequest) -> RecipientProfile:
@@ -215,9 +219,62 @@ def _profile_only(req: HandmadeRequest) -> RecipientProfile:
 @app.post("/api/handmade")
 def handmade_help(req: HandmadeRequest):
     profile = _profile_only(req)
-    if req.want.strip():
-        return {"mode": "plan", "plan": handmade.plan_for(profile, req.want.strip())}
+    want = req.want.strip()
+    if want and req.finalize:              # 材料・手順まで具体化（答え/希望を反映、空でも可）
+        return {"mode": "make", "make": handmade.make_plan(profile, want, req.answers.strip())}
+    if want:                               # 作りたい物だけ → まず一緒に決めることを整理
+        return {"mode": "plan", "plan": handmade.plan_for(profile, want)}
     return {"mode": "ideas", "ideas": handmade.suggest_ideas(profile)}
+
+
+# 完成イメージ（生成AI画像・有料会員向け）。同じ内容はファイルにキャッシュして作り直さない。
+_GENIMG_DIR = Path(__file__).resolve().parent.parent / "data" / "handmade_img"
+
+
+class HandmadeImageIn(BaseModel):
+    title: str
+    materials: list[str] = []
+
+
+@app.post("/api/handmade/image")
+def handmade_image(req: HandmadeImageIn):
+    if not store.get_settings()["subscribed"]:
+        raise HTTPException(402, "完成イメージはプレミアム会員の機能です")
+    _GENIMG_DIR.mkdir(parents=True, exist_ok=True)
+    key = hashlib.md5((req.title + "|" + "|".join(req.materials)).encode("utf-8")).hexdigest()[:16]
+    path = _GENIMG_DIR / f"{key}.png"
+    if not path.exists():                  # キャッシュが無ければ生成（＝API課金はここだけ）
+        img = imagegen.generate(req.title, req.materials)
+        if not img:
+            raise HTTPException(503, "画像を生成できませんでした。少し時間をおいて再度お試しください。")
+        path.write_bytes(img)
+    return {"image_url": f"/genimg/{key}.png"}
+
+
+# 手紙の文面を生成（状況・文字数を聞いて本文を作る。書き手の性別はパートナーから推察）
+class LetterIn(BaseModel):
+    person_id: str | None = None
+    free_text: str = ""
+    situation: str = ""
+    length: str = "medium"     # short / medium / long
+
+
+def _infer_author_gender(relation: str, recipient_gender: str) -> str:
+    """書き手の性別を推察。パートナー宛なら相手の逆（大半がカップル利用のため）。"""
+    if relation == "partner" and recipient_gender in ("male", "female"):
+        return "female" if recipient_gender == "male" else "male"
+    return ""   # 推察できない＝中立的な文体
+
+
+@app.post("/api/handmade/letter")
+def handmade_letter(req: LetterIn):
+    profile = _profile_only(req)        # free_text / person_id だけ使うので流用可
+    person = store.get_person(req.person_id) if req.person_id else None
+    relation = (person or {}).get("relation", "partner")
+    recipient_gender = (person or {}).get("gender") or resolve_gender(relation)
+    author_gender = _infer_author_gender(relation, recipient_gender)
+    letter = handmade.write_letter(profile, relation, req.situation, req.length, author_gender)
+    return {"letter": letter}
 
 
 # ============================ 人 ============================
@@ -312,7 +369,10 @@ FREE_SUGGEST_VISIBLE = 2          # 無料は提案2件まで表示、3件目以
 
 
 class SettingsIn(BaseModel):
-    subscribed: bool
+    subscribed: bool | None = None
+    tone: str | None = None                  # 提案の語り口（warm/plain/polite）
+    default_budget_min: int | None = None    # デフォルト予算（0=未設定）
+    default_budget_max: int | None = None
 
 
 @app.get("/api/settings")
@@ -323,7 +383,8 @@ def get_settings():
 
 @app.post("/api/settings")
 def update_settings(s: SettingsIn):
-    return store.set_subscribed(s.subscribed)
+    patch = {k: v for k, v in s.model_dump().items() if v is not None}
+    return store.update_settings(patch)
 
 
 @app.get("/api/reminders")
@@ -383,14 +444,37 @@ def surprise():
             if it.in_stock and (it.list_price or it.price) >= 2000]
     if not pool:
         raise HTTPException(404, "候補がありません")
-    card = get_narrator().narrate(RecipientProfile(), [random.choice(pool)])[0]
+    tone = store.get_settings().get("tone", "warm")
+    card = get_narrator().narrate(RecipientProfile(), [random.choice(pool)], tone)[0]
     return asdict(card)
+
+
+class SimilarIn(BaseModel):
+    source: str = ""
+    genre_id: str = ""
+    price: int = 0
+    exclude_title: str = ""
+
+
+@app.post("/api/similar")
+def similar(req: SimilarIn):
+    """同じジャンルの似た商品を5件返す（商品タイルのみ・LLMは使わない＝速い/安い）。"""
+    items = fetch_similar(req.source, req.genre_id, req.price, req.exclude_title, k=5)
+    return {"items": [{
+        "name": it.title, "price": it.price, "list_price": it.list_price,
+        "image_url": it.image_url, "url": it.url, "source": it.source,
+        "rating": it.rating, "review_count": it.review_count,
+    } for it in items]}
 
 
 @app.get("/api/health")
 def health():
     return {"ok": True, "rakuten_key": bool(os.getenv("RAKUTEN_APP_ID"))}
 
+
+# 生成した完成イメージの配信（/genimg）。catch-all の "/" より先にマウント。
+_GENIMG_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/genimg", StaticFiles(directory=str(_GENIMG_DIR)), name="genimg")
 
 # フロント（buildless）。/ で index.html、その他静的ファイルも配信。
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

@@ -2,17 +2,26 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>プレゼント提案</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>そっとぎふと — 贈りもの選び</title>
 <link rel="stylesheet" href="/styles.css" />
+<!-- PWA（スマホのホーム画面にアプリとして追加できる） -->
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#c25a3c" />
+<link rel="apple-touch-icon" href="/icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="そっとぎふと" />
 </head>
 <body>
 <div class="wrap">
 
   <!-- アプリバー（右上にギア＝設定） -->
   <header class="appbar">
-    <span class="logo">おくりもの</span>
-    <span class="tagline">迷わず、確信を持って</span>
+    <div class="brand">
+      <span class="logo">そっとぎふと</span>
+      <span class="tagline">そっと寄り添う、贈りもの選び</span>
+    </div>
     <button class="gear" id="open-settings" data-icon="settings" data-size="24" aria-label="設定" title="設定"></button>
   </header>
 
@@ -41,19 +50,25 @@
         <input type="range" id="s-bmin-r" class="budget-range" aria-label="予算の下限" />
         <input type="range" id="s-bmax-r" class="budget-range" aria-label="予算の上限" />
       </div>
-      <p class="sub" style="margin:6px 0 0">下限は2,000円。上限は下限より下げられません。1万円までは1,000円きざみ、超えると5,000円きざみ（最上段は「10万円以上」＝上限なし）。</p>
       <label>相手のこと（登録メモに足したいことがあれば）</label>
       <textarea id="s-free" placeholder="例：最近ライブ映像をよく見てる。手が乾燥するとよく言う。"></textarea>
       <button class="primary" id="s-go">提案してもらう</button>
     </div>
     <div id="s-status"></div>
     <div class="results" id="s-results"></div>
+
+    <!-- 手作りで贈る（商品提案しない・一緒に考える）。提案前から常に使える入口 -->
+    <div class="panel handmade-cta" style="text-align:center">
+      <div class="hm-head"><span class="h-ico" data-icon="palette" data-size="18"></span>手作りで贈る</div>
+      <p class="sub" style="margin:6px 0 12px">商品は出しません。何を作りたいか、相手に合わせて一緒に考えます。</p>
+      <button class="ghost" id="hm-open-main">手作りを一緒に考える →</button>
+    </div>
   </section>
 
   <!-- 👪 人 -->
   <section id="view-people" class="hidden">
     <h1><span class="h-ico" data-icon="people"></span>贈る相手</h1>
-    <p class="sub">登録すると、提案がその人専用に育ちます。ドラッグで並べ替え（左ほど大切な人）。</p>
+    <p class="sub">登録すると、提案がその人専用に育ちます。</p>
     <div class="people-grid" id="people-grid"></div>
 
     <div id="person-detail" class="hidden">
@@ -103,6 +118,9 @@
 </nav>
 
 <div id="modal-root"></div>
+
+<!-- ホーム画面に追加（インストール可能なときだけ表示） -->
+<button id="install-btn" class="install-fab hidden"><span data-icon="plus" data-size="18"></span>ホーム画面に追加</button>
 
 <script src="/icons.js"></script>
 <script src="/holidays.js"></script>

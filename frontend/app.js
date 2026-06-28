@@ -1,6 +1,7 @@
 // ===== 定数 =====
 const RELATIONS = {mother:"母",father:"父",grandmother:"祖母",grandfather:"祖父",
-  partner:"パートナー",friend:"友人",child:"子ども",grandchild:"孫",sibling:"きょうだい",other:"その他"};
+  partner:"パートナー",friend:"友人",child:"子ども",grandchild:"孫",
+  elder_brother:"兄",elder_sister:"姉",younger_brother:"弟",younger_sister:"妹",other:"その他"};
 const AGE_BANDS = ["10s","20s","30s","40s","50s","60s","70s","80s"];
 // 予算スライダーの停止点：2000〜1万円は1000刻み、1万円超は5000刻みで10万まで。
 // 最上段(10万)は「10万円以上＝上限なし」扱い。
@@ -24,7 +25,8 @@ function _posToIdx(p){
 }
 const GENDERS = {female:"女性", male:"男性", other:"その他"};
 // 関係から性別が自明に決まるもの（このとき入力欄は出さない）
-const AUTO_GENDER = {mother:"female", grandmother:"female", father:"male", grandfather:"male"};
+const AUTO_GENDER = {mother:"female", grandmother:"female", father:"male", grandfather:"male",
+  elder_brother:"male", younger_brother:"male", elder_sister:"female", younger_sister:"female"};
 const ICONS = AVATARS;   // icons.js のSVGアバターキー
 const COLORS = ["#e8638c","#5b8def","#36b37e","#9b59b6","#f39c12","#16a5a5"];
 const TYPE_LABEL = {buy:"買えるもの",experience:"体験",make:"手作り"};
@@ -39,6 +41,10 @@ let calMarks = {};               // 表示中の月の {日: [イベント]}
 let isSubscribed = false;        // 有料会員か
 let freeVisible = 2;             // 無料で表示する提案件数
 let freePeopleLimit = 2;         // 無料で登録できる人数
+let narrateTone = "warm";        // 提案の語り口（設定）
+let defaultBudget = {min:0, max:0};   // デフォルト予算（0=未設定）
+let _lastCards = [];                   // 直近の提案カード（似た商品ボタン用）
+const TONES = {warm:"やわらかい", plain:"さっぱり", polite:"ていねい"};
 
 // ===== API =====
 const api = {
@@ -68,6 +74,15 @@ function openSettings(){
         <div><div class="tn">ダーク</div><div class="td">暗い背景＋ゴールドの特別感</div></div>
       </div>
     </div>
+    <label style="margin-top:16px">提案の語り口</label>
+    <select id="set-tone">${Object.entries(TONES).map(([k,v])=>`<option value="${k}" ${k===narrateTone?"selected":""}>${v}</option>`).join("")}</select>
+
+    <label style="margin-top:16px">デフォルト予算（提案画面の初期値）</label>
+    <div class="row">
+      <div><select id="set-bmin">${budgetOptions(defaultBudget.min||2000,false)}</select></div>
+      <div><select id="set-bmax">${budgetOptions(defaultBudget.max||8000,true)}</select></div>
+    </div>
+
     <label style="margin-top:16px">会員（動作確認用トグル）</label>
     <div class="theme-opt" id="sub-row">
       <div class="sw" style="background:linear-gradient(135deg,#cda46a,#b58a48)"></div>
@@ -83,6 +98,20 @@ function openSettings(){
     document.querySelectorAll(".theme-opt[data-theme]").forEach(x => x.classList.remove("sel"));
     el.classList.add("sel");
   });
+  document.getElementById("set-tone").onchange = async (e) => {
+    narrateTone = e.target.value;
+    await api.post("/api/settings", {tone: narrateTone});
+  };
+  const saveDefaultBudget = async () => {
+    let mn = +document.getElementById("set-bmin").value;
+    let mx = +document.getElementById("set-bmax").value;
+    if (mx < mn) { mx = mn; document.getElementById("set-bmax").value = mn; }  // 上限は下限以上
+    defaultBudget = {min: mn, max: mx};
+    setBudget(mn, mx);                                  // 提案画面のスライダーへ即反映
+    await api.post("/api/settings", {default_budget_min: mn, default_budget_max: mx});
+  };
+  document.getElementById("set-bmin").onchange = saveDefaultBudget;
+  document.getElementById("set-bmax").onchange = saveDefaultBudget;
   document.getElementById("sub-btn").onclick = async () => {
     await api.post("/api/settings", {subscribed: !isSubscribed});
     isSubscribed = !isSubscribed;
@@ -92,10 +121,22 @@ function openSettings(){
   };
 }
 
+// 予算ドロップダウンの選択肢（上限側は最上段を「上限なし」に）
+function budgetOptions(sel, isMax){
+  return BUDGET_STEPS.map((v, i) => {
+    const isTop = i === BUDGET_TOP;
+    const label = (isMax && isTop) ? "上限なし" : `${v.toLocaleString()}円`;
+    const val = (isMax && isTop) ? 99999999 : v;
+    const on = (isMax ? (sel >= 99999999 ? isTop : v === sel) : v === sel) ? "selected" : "";
+    return `<option value="${val}" ${on}>${label}</option>`;
+  }).join("");
+}
+
 // ===== 起動 =====
 init();
 async function init(){
   document.querySelectorAll("[data-icon]").forEach(el => el.innerHTML = icon(el.dataset.icon, +el.dataset.size || 24));
+  setupPWA();
   document.getElementById("open-settings").onclick = openSettings;
   const logo = document.querySelector(".appbar .logo");
   if (logo){ logo.style.cursor = "pointer"; logo.onclick = surpriseGift; }   // 隠しギミック
@@ -104,6 +145,7 @@ async function init(){
   document.querySelectorAll(".tabbar button").forEach(b =>
     b.onclick = () => switchView(b.dataset.view));
   document.getElementById("s-go").onclick = runSuggest;
+  document.getElementById("hm-open-main").onclick = openHandmade;   // 手作りの常設入口
   document.getElementById("s-person").onchange = onSuggestPersonChange;
   document.getElementById("cal-prev").onclick = () => { calDate.setMonth(calDate.getMonth()-1); renderCalendar(); };
   document.getElementById("cal-next").onclick = () => { calDate.setMonth(calDate.getMonth()+1); renderCalendar(); };
@@ -119,12 +161,64 @@ async function init(){
   await loadReminders();
 }
 
+// ===== 似た商品（同じジャンル）を5件 =====
+async function openSimilar(card){
+  if (!card) return;
+  modal(`
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("gift",20)} 似た商品</h2>
+    <p class="sub">「${esc(card.name)}」と同じジャンルから集めました。</p>
+    <div id="sim-out"><p class="loading">探しています…</p></div>
+    <div class="modal-actions"><button class="ghost" onclick="closeModal()">閉じる</button></div>`);
+  const data = await api.post("/api/similar", {
+    source: card.source, genre_id: card.genre_id, price: card.price, exclude_title: card.name,
+  });
+  const out = document.getElementById("sim-out");
+  const items = (data && data.items) || [];
+  if (!items.length){ out.innerHTML = `<p class="sub">近い商品が見つかりませんでした。</p>`; return; }
+  out.innerHTML = items.map(it => `
+    <div class="sim-card">
+      <img src="${it.image_url}" alt="" />
+      <div class="sim-body">
+        <div class="sim-name" title="${esc(it.name)}">${esc(it.name)}</div>
+        <div class="sim-meta">${it.review_count?`★${it.rating}（${(it.review_count||0).toLocaleString()}件）`:""}</div>
+        <div class="sim-row">${priceHTML(it)}${sourceTag(it)}<a class="buy" href="${it.url}" target="_blank" rel="noopener">見る →</a></div>
+      </div>
+    </div>`).join("");
+}
+
+// ===== PWA（ホーム画面に追加・オフライン対応） =====
+function setupPWA(){
+  if ("serviceWorker" in navigator){
+    window.addEventListener("load", () =>
+      navigator.serviceWorker.register("/sw.js").catch(e => console.warn("SW登録失敗", e)));
+  }
+  let deferredPrompt = null;
+  const btn = document.getElementById("install-btn");
+  // Chrome等：インストール可能になったらボタンを出す（既定の自動バナーは抑止）
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (btn) btn.classList.remove("hidden");
+  });
+  if (btn) btn.onclick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    btn.classList.add("hidden");
+  };
+  window.addEventListener("appinstalled", () => { if (btn) btn.classList.add("hidden"); });
+}
+
 // ===== 会員状態・広告 =====
 async function loadSettings(){
   const s = await api.get("/api/settings");
   isSubscribed = !!s.subscribed;
   freeVisible = s.free_suggest_visible ?? 2;
   freePeopleLimit = s.free_people_limit ?? 2;
+  narrateTone = s.tone || "warm";
+  defaultBudget = {min: s.default_budget_min || 0, max: s.default_budget_max || 0};
+  if (defaultBudget.min && defaultBudget.max) setBudget(defaultBudget.min, defaultBudget.max);  // 初期値を反映
   renderAds();
 }
 function renderAds(){
@@ -170,7 +264,7 @@ async function surpriseGift(){
           <h3 title="${esc(c.name)}">${esc(c.name)}</h3>
           <div class="reason">${esc(c.reason)}</div>
           <div class="evi">${(c.evidence||[]).map(e=>`<span>${e}</span>`).join("")}</div>
-          <div class="buy-row">${priceHTML(c)}<a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a></div>
+          <div class="buy-row">${priceHTML(c)}${sourceTag(c)}<a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a></div>
         </div>
       </div>
     </div>
@@ -254,6 +348,16 @@ function setBudgetMax(v){
   if (idx < loIdx) idx = loIdx;
   const hi = document.getElementById("s-bmax-r");
   hi.value = BUDGET_POS[idx]; hi.dispatchEvent(new Event("input"));
+}
+function setBudget(min, max){
+  const lo = document.getElementById("s-bmin-r"), hi = document.getElementById("s-bmax-r");
+  if (!lo || !hi) return;
+  let li = BUDGET_STEPS.findIndex(x => x >= min); if (li < 0) li = 0;
+  let hidx = max >= 99999999 ? BUDGET_TOP : BUDGET_STEPS.findIndex(x => x >= max);
+  if (hidx < 0) hidx = BUDGET_TOP;
+  if (hidx < li) hidx = li;
+  lo.value = BUDGET_POS[li]; hi.value = BUDGET_POS[hidx];
+  lo.dispatchEvent(new Event("input"));      // ラベル/塗りを再計算
 }
 
 function fillSelect(id, arr, labelFn){
@@ -342,6 +446,7 @@ async function runSuggest(){
       };
     }
     const locKed = !data.subscribed ? (data.free_visible ?? freeVisible) : Infinity;
+    _lastCards = data.cards || [];
     (data.cards||[]).forEach((c, idx) => {
       const evi = (c.evidence||[]).map(e => `<span>${e}</span>`).join("");
       const isTop = idx === 0;
@@ -357,7 +462,8 @@ async function runSuggest(){
               <h3 title="${esc(c.name)}">${esc(c.name)}</h3>
               <div class="reason">${esc(c.reason)}</div>
               <div class="evi">${evi}</div>
-              <div class="buy-row">${priceHTML(c)}<a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a></div>
+              <div class="buy-row">${priceHTML(c)}${sourceTag(c)}<a class="buy" href="${c.url}" target="_blank" rel="noopener">商品を見る →</a></div>
+              ${(!locked && c.genre_id)?`<button class="sim-btn" data-sim="${idx}">${icon("search",14)}似た商品を探す</button>`:""}
             </div>
           </div>
           ${locked?`<div class="lock-ov"><div class="lock-msg">${icon("sparkle",16)}プレミアムで全部見る</div><button class="ghost up-btn">プレミアムにする</button></div>`:""}
@@ -365,14 +471,9 @@ async function runSuggest(){
     });
     results.querySelectorAll(".up-btn").forEach(b =>
       b.onclick = () => openUpsell(`提案は無料だと${data.free_visible ?? freeVisible}件まで。続きはプレミアムで。`));
-    // 手作りは商品提案しない → 別導線（儲けゼロ・一緒に考える）
-    results.insertAdjacentHTML("beforeend", `
-      <div class="panel" style="text-align:center">
-        <div style="display:flex;align-items:center;justify-content:center;gap:6px;font-weight:700;color:var(--accent-deep)">${icon("palette",18)} 手作りで贈るのもいい</div>
-        <p class="sub" style="margin:6px 0 10px">商品は出しません。何を作りたいか、一緒に考えます。</p>
-        <button class="ghost" id="hm-open">手作りを一緒に考える →</button>
-      </div>`);
-    document.getElementById("hm-open").onclick = openHandmade;
+    results.querySelectorAll(".sim-btn").forEach(b =>
+      b.onclick = () => openSimilar(_lastCards[+b.dataset.sim]));
+    // 手作りの入口は提案タブに常設（下の handmade-cta）。ここでは重複表示しない。
   }catch(e){ status.innerHTML = `<p class="loading">エラー：${e}</p>`; }
   finally{ btn.disabled = false; }
 }
@@ -390,12 +491,20 @@ function openHandmade(){
     </div>
     <div id="hm-out"></div>`);
   document.getElementById("hm-ideas").onclick = () => loadHandmade("");
-  document.getElementById("hm-plan").onclick = () =>
-    loadHandmade(document.getElementById("hm-want").value.trim());
+  document.getElementById("hm-plan").onclick = () => {
+    const w = document.getElementById("hm-want").value.trim();
+    if (isLetterWant(w)) openLetterForm(w); else loadHandmade(w);   // 手紙は専用フローへ
+  };
 }
+function isLetterWant(t){ return /手紙|レター/.test(t || ""); }
+
+let _hmIdeas = [];   // 直近の手作りアイデア（もどる で再取得しないためのキャッシュ）
+let _hmWant = "";    // 直近の「作りたいもの」
+let _hmPlan = null;  // 直近のプラン（質問）
 
 async function loadHandmade(want){
   const out = document.getElementById("hm-out");
+  _hmWant = want;
   out.innerHTML = `<p class="loading">考えています…</p>`;
   const data = await api.post("/api/handmade", {
     person_id: document.getElementById("s-person").value || null,
@@ -403,37 +512,172 @@ async function loadHandmade(want){
     want,
   });
   if (data.mode === "ideas"){
-    out.innerHTML = `<p class="sub" style="margin-top:14px">相手に合いそうな“作る方向”です。気になるものから一緒に詰めましょう。</p>`
-      + data.ideas.map(renderIdea).join("");
+    _hmIdeas = data.ideas || [];
+    renderHandmadeIdeas(out);
   } else {
-    out.innerHTML = renderPlan(data.plan);
+    _hmPlan = data.plan;
+    renderHandmadePlan(out);
   }
 }
-function renderIdea(i){
-  return `<div class="panel" style="margin:10px 0">
-    <div style="font-weight:700">${esc(i.title)}</div>
-    <p style="font-size:13px;margin:6px 0">${esc(i.why)}</p>
-    <div class="sub">材料：${(i.materials||[]).map(esc).join("、")}</div>
-    <ol style="font-size:13px;margin:6px 0 0;padding-left:18px">${(i.steps||[]).map(s=>`<li>${esc(s)}</li>`).join("")}</ol>
-    <div class="note" style="margin-top:8px;display:flex;align-items:center;gap:7px">${icon("bulb",16)}<span>${esc(i.tip||"")}</span></div>
-  </div>`;
+// 第1段(決まってない)：アイデア一覧。概要＋「○○を作る」ボタンだけ（材料・手順は次の画面へ）
+function renderHandmadeIdeas(out){
+  out.innerHTML = `<p class="sub" style="margin-top:14px">相手に合いそうな“作る方向”です。気になるものの「作る」を押すと、材料と手順が出ます。</p>`
+    + _hmIdeas.map((i, idx) => `
+      <div class="panel" style="margin:10px 0">
+        <div style="font-weight:700">${esc(i.title)}</div>
+        <p style="font-size:13px;margin:6px 0 10px">${esc(i.why)}</p>
+        <button class="primary" style="margin:0;width:100%" data-hm-make="${idx}">「${esc(i.title)}」を作る →</button>
+      </div>`).join("");
+  out.querySelectorAll("[data-hm-make]").forEach(b =>
+    b.onclick = () => {
+      const idx = +b.dataset.hmMake;
+      if (isLetterWant(_hmIdeas[idx] && _hmIdeas[idx].title)) openLetterForm(_hmIdeas[idx].title);
+      else openHandmadeDetail(idx);
+    });
 }
-function renderPlan(p){
-  return `<div class="panel" style="margin:10px 0">
-    <div style="font-weight:700">${esc(p.title)}</div>
-    <p style="font-size:13px;margin:6px 0">${esc(p.why)}</p>
-    <div class="sub">一緒に決めたいこと：</div>
-    <ul style="font-size:13px;margin:6px 0;padding-left:18px">${(p.questions||[]).map(q=>`<li>${esc(q)}</li>`).join("")}</ul>
-    <div class="note">${esc(p.next||"")}</div>
-  </div>`;
+// 第1段(決まってる)：一緒に決めたいこと＋答え欄＋「材料と手順へ進む」
+function renderHandmadePlan(out){
+  const p = _hmPlan || {};
+  out.innerHTML = `
+    <div class="panel" style="margin:14px 0 12px">
+      <div style="font-weight:700">${esc(p.title||_hmWant)}</div>
+      <p style="font-size:13px;margin:6px 0">${esc(p.why||"")}</p>
+      <div class="sub">一緒に決めたいこと：</div>
+      <ul style="font-size:13px;margin:6px 0;padding-left:18px">${(p.questions||[]).map(q=>`<li>${esc(q)}</li>`).join("")}</ul>
+      <div class="note">${esc(p.next||"")}</div>
+    </div>
+    <label>答え・ご希望（任意・上の質問に答えるとより具体的に）</label>
+    <textarea id="hm-answers" placeholder="例：母の日まで。家族写真が中心。押し花も入れたい。"></textarea>
+    <button class="primary" id="hm-finalize" style="width:100%;margin:8px 0 0">材料と手順へ進む →</button>`;
+  document.getElementById("hm-finalize").onclick = finalizeHandmade;
+}
+// プラン→具体化：答えを反映して材料・手順を作り、別ウィンドウで表示
+async function finalizeHandmade(){
+  const btn = document.getElementById("hm-finalize");
+  const answers = document.getElementById("hm-answers").value.trim();
+  btn.disabled = true; btn.textContent = "考えています…";
+  try{
+    const data = await api.post("/api/handmade", {
+      person_id: document.getElementById("s-person").value || null,
+      free_text: document.getElementById("s-free").value,
+      want: _hmWant, answers, finalize: true,
+    });
+    makeDetailModal(data.make, backToHandmadePlan);
+  }catch(e){ btn.disabled = false; btn.textContent = "材料と手順へ進む →"; alert("エラー："+e); }
+}
+// 第2段：材料・手順を別ウィンドウ（モーダル）で表示。もどる先は呼び出し元が指定
+function makeDetailModal(i, backFn){
+  if (!i) return;
+  modal(`
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("palette",20)} ${esc(i.title)}</h2>
+    <p class="sub">${esc(i.why)}</p>
+    <label>材料</label>
+    <ul style="font-size:14px;margin:4px 0 0;padding-left:20px;line-height:1.9">${(i.materials||[]).map(m=>`<li>${esc(m)}</li>`).join("")}</ul>
+    <label style="margin-top:14px">手順</label>
+    <ol style="font-size:14px;margin:4px 0 0;padding-left:20px;line-height:1.9">${(i.steps||[]).map(s=>`<li>${esc(s)}</li>`).join("")}</ol>
+    ${(i.source||i.budget)?`
+    <div class="hm-meta">
+      ${i.source?`<div><span class="k">${icon("house",15)}調達先</span><span>${esc(i.source)}</span></div>`:""}
+      ${i.budget?`<div><span class="k">${icon("gift",15)}予算目安</span><span>${esc(i.budget)}</span></div>`:""}
+    </div>`:""}
+    ${i.tip?`<label style="margin-top:14px">作成のアドバイス（難しいポイント）</label>
+    <div class="note" style="display:flex;align-items:flex-start;gap:7px">${icon("bulb",16)}<span>${esc(i.tip)}</span></div>`:""}
+    <label style="margin-top:16px">完成イメージ</label>
+    ${isSubscribed
+      ? `<button class="premium-btn" id="hm-img-btn" style="width:100%">${icon("sparkle",16)}完成イメージを見る<span class="pchip">PREMIUM</span></button>`
+      : `<button class="ghost" id="hm-img-up" style="width:100%;margin:0">完成イメージを見る（プレミアム）</button>`}
+    <div id="hm-img-area"></div>
+    <div class="modal-actions">
+      <button class="ghost" id="hm-back">← もどる</button>
+      <button class="primary" style="margin:0" onclick="closeModal()">閉じる</button>
+    </div>`);
+  document.getElementById("hm-back").onclick = backFn;
+  if (isSubscribed){
+    document.getElementById("hm-img-btn").onclick = () => showHandmadeImage(i);
+  } else {
+    document.getElementById("hm-img-up").onclick = () =>
+      openUpsell("手作りの“完成イメージ”（生成AI）はプレミアム会員の機能です。仕上がりを思い描いてから作れます。");
+  }
+}
+// 完成イメージを生成して表示（有料会員のみ）。同じ内容はサーバー側でキャッシュ。
+async function showHandmadeImage(item){
+  const btn = document.getElementById("hm-img-btn");
+  const area = document.getElementById("hm-img-area");
+  btn.disabled = true;
+  btn.innerHTML = "生成中…（10秒ほど）";
+  const data = await api.post("/api/handmade/image", {
+    title: item.title, materials: item.materials || [],
+  });
+  if (data && data.image_url){
+    area.innerHTML = `<img src="${data.image_url}" alt="完成イメージ"
+        style="width:100%;border-radius:10px;margin-top:10px;display:block"/>
+      <p class="sub" style="margin:6px 0 0;text-align:center">生成AIによるイメージです（実物とは異なります）</p>`;
+    btn.style.display = "none";
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = "もう一度ためす";
+    area.innerHTML = `<p class="sub" style="margin-top:8px">${esc((data && data.detail) || "画像を生成できませんでした。")}</p>`;
+  }
+}
+function openHandmadeDetail(idx){ makeDetailModal(_hmIdeas[idx], backToHandmadeIdeas); }
+// もどる：入力モーダルを開き直し、キャッシュから再表示（再生成しない）
+function backToHandmadeIdeas(){
+  openHandmade();
+  if (_hmIdeas.length) renderHandmadeIdeas(document.getElementById("hm-out"));
+}
+function backToHandmadePlan(){
+  openHandmade();
+  if (_hmPlan) renderHandmadePlan(document.getElementById("hm-out"));
+}
+
+// ===== 手紙：状況・文字数を聞いて本文を生成 =====
+function openLetterForm(want){
+  modal(`
+    <h2 style="display:flex;align-items:center;gap:8px">${icon("heart",20)} 手紙を作る</h2>
+    <p class="sub">いくつか教えてください。文章はこちらで下書きします（そのまま使っても、直してもOK）。</p>
+    <label>どんな時・伝えたいこと</label>
+    <textarea id="lt-situation" placeholder="例：結婚記念日。いつも支えてくれてありがとうを伝えたい。"></textarea>
+    <label>長さ</label>
+    <select id="lt-length">
+      <option value="short">みじかめ（100〜150字）</option>
+      <option value="medium" selected>ふつう（200〜300字）</option>
+      <option value="long">ながめ（400〜500字）</option>
+    </select>
+    <button class="primary" id="lt-go" style="width:100%;margin:12px 0 0">手紙の下書きを作る →</button>
+    <div id="lt-out"></div>
+    <div class="modal-actions"><button class="ghost" onclick="closeModal()">閉じる</button></div>`);
+  document.getElementById("lt-go").onclick = generateLetter;
+}
+async function generateLetter(){
+  const btn = document.getElementById("lt-go"), out = document.getElementById("lt-out");
+  btn.disabled = true; btn.textContent = "書いています…";
+  const data = await api.post("/api/handmade/letter", {
+    person_id: document.getElementById("s-person").value || null,
+    free_text: document.getElementById("s-free").value,
+    situation: document.getElementById("lt-situation").value.trim(),
+    length: document.getElementById("lt-length").value,
+  });
+  btn.disabled = false; btn.textContent = "もう一度つくる";
+  if (data && data.letter){
+    out.innerHTML = `<div class="letter-paper">${esc(data.letter)}</div>
+      <button class="ghost" id="lt-copy" style="width:100%;margin:8px 0 0">コピーする</button>
+      <p class="sub" style="margin:6px 0 0;text-align:center">下書きです。あなたの言葉に直して使ってください。</p>`;
+    document.getElementById("lt-copy").onclick = () => {
+      navigator.clipboard?.writeText(data.letter);
+      document.getElementById("lt-copy").textContent = "コピーしました ✓";
+    };
+  } else {
+    out.innerHTML = `<p class="sub" style="margin-top:8px">${esc((data && data.detail) || "作成できませんでした。")}</p>`;
+  }
 }
 
 // ===== 👪 人 =====
 function renderPeopleGrid(){
   const grid = document.getElementById("people-grid");
   grid.innerHTML = people.map(p => `
-    <div class="person ${p.id===selectedPersonId?'sel':''}" data-id="${p.id}" draggable="true">
-      <div class="avatar" style="background:${p.color}22;color:${p.color}">${avatarHTML(p,p.photo_url?56:36)}</div>
+    <div class="person ${p.id===selectedPersonId?'sel':''}" data-id="${p.id}">
+      <span class="drag-handle" title="長押し／つまんで並べ替え" aria-label="並べ替え">${icon("grip",18)}</span>
+      <div class="avatar">${avatarHTML(p,p.photo_url?56:36)}</div>
       <div class="name">${esc(displayName(p))}</div>
       <div class="meta">${RELATIONS[p.relation]||p.relation}・${p.age_band}</div>
       <div class="meta">${[
@@ -442,20 +686,52 @@ function renderPeopleGrid(){
       ].filter(Boolean).join(" ")}</div>
     </div>`).join("") +
     `<div class="add-person" id="add-person">＋ 人を登録</div>`;
-  let dragId = null;
   grid.querySelectorAll(".person").forEach(el => {
-    el.onclick = () => { if (!el.classList.contains("was-dragged")) selectPerson(el.dataset.id); };
-    el.addEventListener("dragstart", () => { dragId = el.dataset.id; el.classList.add("dragging"); });
-    el.addEventListener("dragend", () => { el.classList.remove("dragging");
-      setTimeout(() => el.classList.remove("was-dragged"), 50); });
-    el.addEventListener("dragover", e => e.preventDefault());
-    el.addEventListener("drop", e => {
-      e.preventDefault();
-      el.classList.add("was-dragged");            // ドロップ直後の誤クリック選択を抑止
-      if (dragId && dragId !== el.dataset.id) reorderPeople(dragId, el.dataset.id);
-    });
+    el.onclick = () => selectPerson(el.dataset.id);
   });
+  setupReorder(grid);                                  // つまみでドラッグ並べ替え（マウス・タッチ両対応）
   document.getElementById("add-person").onclick = addPerson;
+}
+
+// グリップ（つまみ）をポインタでドラッグして並べ替え。Pointer Events でマウス／タッチ両対応。
+function setupReorder(grid){
+  let dragEl = null, dragId = null, target = null;
+  const clearTarget = () => { if (target){ target.classList.remove("drop-target"); target = null; } };
+
+  grid.querySelectorAll(".person .drag-handle").forEach(handle => {
+    const el = handle.closest(".person");
+    handle.addEventListener("click", e => e.stopPropagation());   // つまみのクリックで選択しない
+
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      dragEl = el; dragId = el.dataset.id;
+      el.classList.add("dragging");
+      handle.setPointerCapture(e.pointerId);                      // 指が他カードへ移っても追従
+      if (navigator.vibrate) navigator.vibrate(8);                // 触覚で「つかんだ」合図
+    });
+
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragEl) return;
+      e.preventDefault();
+      const over = document.elementFromPoint(e.clientX, e.clientY);
+      const cand = over && over.closest ? over.closest(".person") : null;
+      if (cand !== target){
+        clearTarget();
+        if (cand && cand !== dragEl){ cand.classList.add("drop-target"); target = cand; }
+      }
+    });
+
+    const finish = () => {
+      if (!dragEl) return;
+      const tid = target && target.dataset.id;
+      dragEl.classList.remove("dragging");
+      clearTarget();
+      const from = dragId; dragEl = null; dragId = null;
+      if (tid && tid !== from) reorderPeople(from, tid);
+    };
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", finish);
+  });
 }
 
 async function reorderPeople(dragId, targetId){
@@ -485,10 +761,32 @@ function priceHTML(c){
   }
   return `<span class="price">¥${(c.price||0).toLocaleString()}</span>`;
 }
-// 顔写真があれば写真、無ければアイコン（顔写真は無料機能）
+// 取得元バッジ（楽天 / Yahoo など）。どこで買えるか一目で分かるように。
+function sourceTag(c){
+  if (!c.source) return "";
+  const cls = c.source === "楽天" ? "src-rakuten" : c.source === "Yahoo" ? "src-yahoo" : "";
+  return `<span class="src ${cls}">${esc(c.source)}</span>`;
+}
+// 関係＋性別からアバターを自動決定（色＝性別。桃=女性/青=男性/グレー=中立）
+function avatarKeyFor(p){
+  const g = AUTO_GENDER[p.relation] || p.gender || "";
+  switch (p.relation){
+    case "mother": return "woman";
+    case "father": return "man";
+    case "grandmother": return "elder_woman";
+    case "grandfather": return "elder_man";
+    case "partner": return "couple";
+    case "friend": return "friend";
+    case "child": case "grandchild":
+      return g === "male" ? "boy" : g === "female" ? "girl" : "person";
+    default:
+      return g === "female" ? "woman" : g === "male" ? "man" : "person";
+  }
+}
+// 顔写真があれば写真、無ければ自動アバター（顔写真は無料機能）
 function avatarHTML(p, size){
   if (p.photo_url) return `<img src="${p.photo_url}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;display:block" />`;
-  return icon(p.icon, size);
+  return icon(avatarKeyFor(p), size);
 }
 
 async function selectPerson(id){
@@ -583,7 +881,7 @@ function modal(html){
 function closeModal(){ document.getElementById("modal-root").innerHTML = ""; }
 
 function openPersonForm(p){
-  const e = p || {icon:"person",color:COLORS[0],age_band:"60s",relation:"mother"};
+  const e = p || {age_band:"60s",relation:"mother"};
   modal(`
     <h2>${p?"相手を編集":"相手を登録"}</h2>
     <label>名前（任意）</label><input id="f-name" value="${esc(e.name||"")}" placeholder="未入力でOK（「母」などで表示）" />
@@ -605,11 +903,8 @@ function openPersonForm(p){
     <label>顔写真（任意・無料）</label>
     <input class="ev-photo-input" id="f-photo" type="file" accept="image/*" />
     <div id="f-photo-preview">${e.photo_url?`<img src="${e.photo_url}" style="margin-top:8px;width:72px;height:72px;border-radius:50%;object-fit:cover" />`:""}</div>
-    <label style="margin-top:8px">アイコン（写真が無い時に表示）</label>
-    <div class="icon-pick" id="f-icons">${ICONS.map(i=>`<span class="${i===e.icon?"sel":""}" data-i="${i}" title="${(typeof AVATAR_LABELS!=='undefined'&&AVATAR_LABELS[i])||i}">${icon(i,22)}</span>`).join("")}</div>
-    <label>色</label>
-    <div class="color-pick" id="f-colors">${COLORS.map(c=>`<span class="${c===e.color?"sel":""}" data-c="${c}" style="background:${c}"></span>`).join("")}</div>
-    <label>メモ（好きなこと・最近こぼしてたこと）</label>
+    <p class="sub" style="margin:6px 0 0">写真が無いときは、関係と性別に合ったアイコンを自動で表示します。</p>
+    <label>メモ（好きなこと・最近気になっていること）</label>
     <textarea id="f-notes" placeholder="音楽、お茶、甘いもの">${esc(e.notes||"")}</textarea>
     <label>避けたいもの（任意・カンマ区切り）</label>
     <input id="f-avoid" value="${esc((e.avoid||[]).join(","))}" placeholder="香水, アルコール" />
@@ -626,7 +921,7 @@ function openPersonForm(p){
   document.getElementById("f-rel").onchange = toggleGender;
   toggleGender();
 
-  let pickedIcon=e.icon, color=e.color, photoData=e.photo_url||"";   // ローカル名はグローバルicon()と衝突させない
+  let photoData=e.photo_url||"";
   document.getElementById("f-photo").onchange = (ev) => {
     const f = ev.target.files[0]; if (!f) return;
     resizeImage(f, 512, (d) => {
@@ -635,12 +930,6 @@ function openPersonForm(p){
         `<img src="${d}" style="margin-top:8px;width:72px;height:72px;border-radius:50%;object-fit:cover" />`;
     });
   };
-  document.querySelectorAll("#f-icons span").forEach(s => s.onclick = () => {
-    pickedIcon=s.dataset.i; document.querySelectorAll("#f-icons span").forEach(x=>x.classList.remove("sel")); s.classList.add("sel");
-  });
-  document.querySelectorAll("#f-colors span").forEach(s => s.onclick = () => {
-    color=s.dataset.c; document.querySelectorAll("#f-colors span").forEach(x=>x.classList.remove("sel")); s.classList.add("sel");
-  });
   document.getElementById("f-save").onclick = async () => {
     const name = document.getElementById("f-name").value.trim();   // 任意（空でOK）
     const rel = document.getElementById("f-rel").value;
@@ -652,7 +941,7 @@ function openPersonForm(p){
       age_band: document.getElementById("f-age").value,
       birthday: document.getElementById("f-bday").value,
       anniversary: document.getElementById("f-anniv").value,
-      icon: pickedIcon, color, photo_url: photoData,
+      photo_url: photoData,
       notes: document.getElementById("f-notes").value,
       avoid: splitCsv(document.getElementById("f-avoid").value),
       likes: e.likes||[],
@@ -805,7 +1094,7 @@ function markHTML(mk){
   const p = mk.person_id ? people.find(x => x.id === mk.person_id) : null;
   const pid = p ? `data-pid="${p.id}"` : "";
   if (mk.kind === "birthday" && p)
-    return `<span class="bday" style="background:${p.color}22;color:${p.color}" ${pid} title="${esc(displayName(p))}の誕生日">${avatarHTML(p, p.photo_url?24:16)}</span>`;
+    return `<span class="bday" ${pid} title="${esc(displayName(p))}の誕生日">${avatarHTML(p, p.photo_url?24:16)}</span>`;
   if (mk.kind === "anniversary")
     return `<span class="bday" style="background:#f0ddd2;color:#c25a3c" ${pid} title="${esc((p?displayName(p):"")+"との記念日")}">${icon("heart",15)}</span>`;
   if (mk.kind === "gift")

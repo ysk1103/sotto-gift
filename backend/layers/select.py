@@ -8,15 +8,27 @@ from __future__ import annotations
 
 import re
 
-from ..models import Item, RecipientProfile, SearchIntent
+from ..models import Item, RecipientProfile, SearchIntent, is_premium
 
 # --- 調整パラメータ（仕様書 §5。初期値は仮、運用ログでチューニング前提） ---
 RATING_FLOOR = 3.0           # ゲート：これ未満のレビュー評価は足切り
 DUP_SIM = 0.5                # ゲート：あげた品とこの類似度以上は「酷似」として除外
 BUDGET_FLOOR = 2000          # ゲート：これ未満は「プレゼント想定外」として常に除外（緩めない）
 
-# スコア合成重み（Fit を主役に固定、他はチューニング対象）
-W_FIT, W_QUALITY, W_TREND, W_NOVELTY, W_BUDGET = 0.40, 0.25, 0.15, 0.10, 0.10
+# スコア合成重み（Fit を主役に固定）。予算帯で配分を変える：
+#   通常帯  … Trust は控えめ（ブランド信頼の方針を薄く反映）
+#   高級帯  … Trust を主役級に上げ、百貨店・ブランド店を上位へ押し上げる
+W_NORMAL = dict(fit=.38, quality=.22, trend=.13, novelty=.09, budget=.08, trust=.10)
+W_PREMIUM = dict(fit=.32, quality=.18, trend=.08, novelty=.07, budget=.05, trust=.30)
+
+# 信頼できる百貨店・ブランド店（店名の部分一致で判定）。ノーブランド激安を避ける拠り所。
+TRUSTED_SHOPS = (
+    "伊勢丹", "三越", "高島屋", "大丸", "松坂屋", "そごう", "西武", "阪急", "阪神",
+    "東急百貨店", "小田急", "京王", "近鉄百貨店", "松屋", "名鉄百貨店", "岩田屋",
+    "MOO:D MARK", "ムードマーク", "DEAN & DELUCA", "ディーン", "資生堂", "ロクシタン",
+    "ゴディバ", "GODIVA", "ヨックモック", "とらや", "榮太樓", "HIGASHIYA",
+    "ピエール", "ウェッジウッド", "WEDGWOOD", "ティファニー", "TIFFANY",
+)
 
 # ベイズ補正の事前分布（★4.7×3件のような薄いレビューを割り引く）
 BAYES_PRIOR_MEAN = 3.5
@@ -128,6 +140,24 @@ def _budget(it: Item, intent: SearchIntent) -> float:
     return 0.4 + 0.6 * ratio                          # 上限寄りを軽く加点（安すぎ減点）
 
 
+def _trust(it: Item) -> float:
+    """ブランド信頼度（0〜1）。百貨店・ブランド店＝高、実績の薄い無名店＝低。
+
+    高級帯ではこれを主役級に効かせ、ノーブランド激安が上位に来るのを防ぐ。
+    """
+    name = it.shop_name or ""
+    if any(s in name for s in TRUSTED_SHOPS):
+        return 1.0                                   # 百貨店・有名ブランド店
+    # ふるさと納税の返礼品（店名＝自治体名）はプレゼント用途に不適切＝強く下げる
+    if "ふるさと" in name or "納税" in name or name.endswith(("市", "町", "村", "区", "郡")):
+        return 0.15
+    if it.review_count >= 50 and it.rating >= 4.0:
+        return 0.7                                   # 無名でも実績十分なら信頼に足る
+    if it.review_count < 5:
+        return 0.35                                  # 実績が薄い＝ノーブランド激安リスク
+    return 0.55
+
+
 def _freshness(title: str, shown: list[str]) -> float:
     """「またこれ？」防止。最近提案した物ほど強く減点（古い既出は徐々に復活）。
 
@@ -147,6 +177,7 @@ def score_items(items: list[Item], profile: RecipientProfile, intent: SearchInte
     max_reviews = max((it.review_count for it in items), default=1) or 1
     scored = []
     profile_terms = profile.free_text + profile.likes + intent.keywords
+    w = W_PREMIUM if is_premium(intent) else W_NORMAL    # 予算帯で重み配分を切替
 
     # Fit: embedding(cosine)があれば意味ベース、無ければ部分一致。
     # cosは0.5付近に密集するので候補内でmin-max正規化して差を効かせる。
@@ -168,11 +199,12 @@ def score_items(items: list[Item], profile: RecipientProfile, intent: SearchInte
         trend = _trend(it, profile)
         novelty = _novelty(it, gave_categories)
         budget = _budget(it, intent)
+        trust = _trust(it)                                # ブランド信頼（高級帯で主役級）
         fresh = _freshness(it.title, shown)               # 既出は減点＝ローテーション
-        total = (W_FIT * fit + W_QUALITY * quality + W_TREND * trend
-                 + W_NOVELTY * novelty + W_BUDGET * budget) * fresh
+        total = (w["fit"] * fit + w["quality"] * quality + w["trend"] * trend
+                 + w["novelty"] * novelty + w["budget"] * budget + w["trust"] * trust) * fresh
         parts = {"fit": fit, "quality": quality, "trend": trend,
-                 "novelty": novelty, "budget": budget, "fresh": fresh}
+                 "novelty": novelty, "budget": budget, "trust": trust, "fresh": fresh}
         scored.append((it, total, parts))
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored

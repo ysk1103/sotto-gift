@@ -9,18 +9,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-# 関係から自明に決まる性別（母・祖母＝女性、父・祖父＝男性）。
-# それ以外（パートナー/友人/子/孫/きょうだい/その他）は登録時に手入力。
+# 関係から自明に決まる性別（母・祖母・姉・妹＝女性、父・祖父・兄・弟＝男性）。
+# それ以外（パートナー/友人/子/孫/その他）は登録時に手入力。
 RELATION_GENDER = {
     "mother": "female", "grandmother": "female",
     "father": "male", "grandfather": "male",
+    "elder_brother": "male", "younger_brother": "male",
+    "elder_sister": "female", "younger_sister": "female",
 }
 
 # 関係の日本語ラベル（名前が未入力のとき表示名に使う）
 RELATION_LABEL = {
     "mother": "母", "father": "父", "grandmother": "祖母", "grandfather": "祖父",
     "partner": "パートナー", "friend": "友人", "child": "子ども", "grandchild": "孫",
-    "sibling": "きょうだい", "other": "相手",
+    "elder_brother": "兄", "elder_sister": "姉", "younger_brother": "弟", "younger_sister": "妹",
+    "other": "相手",
 }
 
 
@@ -49,6 +52,8 @@ class Item:
     description: str = ""
     list_price: int = 0                  # 通常価格（0=不明）。安すぎ判定はこちらで見る
     shop_name: str = ""                  # 出店ショップ名（ブランド信頼判定で後で使う）
+    source: str = ""                     # 取得元（"楽天" | "Yahoo" など。表示と多様化に使う）
+    genre_id: str = ""                   # ジャンルID（楽天genreId / Yahoo genreCategory.id）＝似た商品検索に使う
     target_gender: str = ""              # ""=男女問わず / "female" / "male"
     embedding: Optional[list] = None     # Fit計算用ベクトル（②取得後に付与）
     ranking_rank: Optional[int] = None   # ランキング順位（あれば）
@@ -84,6 +89,16 @@ class SearchIntent:
     budget_min: int = 0
     budget_max: int = 100_000
     # delivery_deadline は Phase1 ではゲートで簡易扱い（在庫のみ見る）
+
+
+# 高級帯のしきい値：下限がこの額以上＝「安いのは要らない」という明確な合図。
+# このときは②で百貨店寄りの品を補充し、③で百貨店・ブランド店を優先する。
+HIGH_BUDGET_MIN = 15_000
+
+
+def is_premium(intent: "SearchIntent") -> bool:
+    """高級帯の意図か（予算下限が高い＝百貨店・ブランド優先）。"""
+    return intent.budget_min >= HIGH_BUDGET_MIN
 
 
 # --- 登録した相手（仕様書 §4 Person） ---
@@ -130,3 +145,5 @@ class SuggestionCard:
     image_url: str
     price: int
     list_price: int = 0     # 通常価格（セール表示用。0=通常価格と同じ）
+    source: str = ""        # 取得元（"楽天" | "Yahoo" など）。カードにバッジ表示
+    genre_id: str = ""      # ジャンルID（似た商品検索用）
