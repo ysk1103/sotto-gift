@@ -112,6 +112,14 @@ button.mini{background:none;border:none;color:var(--muted);cursor:pointer;font-s
 .login-msg{font-size:14px;color:var(--ink);margin:22px 0 16px;font-weight:700;}
 #login-screen #gbtn{display:flex;justify-content:center;}
 .login-note{font-size:11.5px;color:var(--muted);margin-top:18px;line-height:1.6;}
+.legal-links{margin-top:14px;font-size:11.5px;}
+.legal-links a{color:var(--muted);text-decoration:none;}
+.legal-links a:hover{color:var(--accent-deep);}
+/* アプリ下部フッター（アフィリ表記＋法務リンク） */
+.app-footer{margin-top:24px;padding:16px 0 8px;border-top:1px solid var(--line);text-align:center;
+  color:var(--muted);font-size:11.5px;line-height:1.9;}
+.app-footer a{color:var(--muted);text-decoration:none;}
+.app-footer a:hover{color:var(--accent-deep);}
 
 /* 提案カードのロック（無料・3件目以降ぼかし） */
 .gift.locked{position:relative;}
