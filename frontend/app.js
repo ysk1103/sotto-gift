@@ -464,18 +464,10 @@ async function runSuggest(){
       document.getElementById("lim-go").onclick = () => openUpsell("回数制限なしで使えます。");
       return;
     }
+    // 裏側の処理（条件緩和・履歴学習・被り回避）はユーザーに見せない。残り回数だけ静かに表示。
     let notes = "";
     if (data.remaining_today !== null && data.remaining_today !== undefined){
       notes += `<p class="sub" style="margin:0 0 8px">今日の無料提案：あと${data.remaining_today}回</p>`;
-    }
-    if (data.relax_note){
-      notes += `<div class="note" style="display:flex;align-items:center;gap:7px;background:var(--surface);color:var(--muted)">${icon("bulb",16)}<span>${esc(data.relax_note)}</span></div>`;
-    }
-    if (data.learned_from_history?.length || data.avoided_count){
-      const bits = [];
-      if (data.learned_from_history?.length) bits.push(`もらった履歴から学習：${data.learned_from_history.slice(0,5).join("・")}`);
-      if (data.avoided_count) bits.push(`去年あげた${data.avoided_count}件は被り回避`);
-      notes += `<div class="note" style="display:flex;align-items:center;gap:7px">${icon("sparkle",16)}<span>${bits.join(" ／ ")}</span></div>`;
     }
     status.innerHTML = notes;
     // ★ 行き止まりにしない：万一ゼロなら追い質問→ワンタップで再提案
