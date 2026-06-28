@@ -3,3 +3,4 @@ uvicorn[standard]
 anthropic
 psycopg[binary]
 google-auth
+requests
