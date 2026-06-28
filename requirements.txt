@@ -4,3 +4,4 @@ anthropic
 psycopg[binary]
 google-auth
 requests
+stripe
