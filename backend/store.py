@@ -18,18 +18,19 @@ _lock = Lock()
 
 # DATABASE_URL があれば本番＝Postgresに保存（再起動で消えない）。無ければローカル＝JSONファイル。
 _DATABASE_URL = os.getenv("DATABASE_URL")
-_pg_conn = None
+_table_ready = False
 
 
-def _pg():
-    """Postgres接続（遅延接続・切れたら再接続）。psycopgは本番のみ読み込む。"""
-    global _pg_conn
+def _connect():
+    """都度新しい接続を開く（リクエストごと＝スレッド安全。共有接続の競合を避ける）。"""
     import psycopg
-    if _pg_conn is None or _pg_conn.closed:
-        _pg_conn = psycopg.connect(_DATABASE_URL, autocommit=True)
-        with _pg_conn.cursor() as cur:
+    conn = psycopg.connect(_DATABASE_URL, autocommit=True, connect_timeout=10)
+    global _table_ready
+    if not _table_ready:
+        with conn.cursor() as cur:
             cur.execute("CREATE TABLE IF NOT EXISTS appstate (id text PRIMARY KEY, data jsonb NOT NULL)")
-    return _pg_conn
+        _table_ready = True
+    return conn
 
 
 def _apply_defaults(data: dict) -> dict:
@@ -49,7 +50,7 @@ def _apply_defaults(data: dict) -> dict:
 
 def _load() -> dict:
     if _DATABASE_URL:
-        with _pg().cursor() as cur:
+        with _connect() as conn, conn.cursor() as cur:
             cur.execute("SELECT data FROM appstate WHERE id='main'")
             row = cur.fetchone()
         data = row[0] if row else {}
@@ -64,7 +65,7 @@ def _load() -> dict:
 def _save(data: dict) -> None:
     if _DATABASE_URL:
         from psycopg.types.json import Jsonb
-        with _pg().cursor() as cur:
+        with _connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO appstate (id, data) VALUES ('main', %s) "
                 "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
