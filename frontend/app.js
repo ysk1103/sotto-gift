@@ -94,10 +94,19 @@ function openSettings(){
             : `<button class="premium-btn" id="sub-go" style="margin:0">${icon("sparkle",15)}プレミアム（月¥480）</button>`)
         : `<button class="ghost" id="sub-btn" style="margin:0">${isSubscribed?"無料に戻す":"プレミアムにする"}</button>`}
     </div>
-    ${isLoggedIn?`<div style="margin-top:18px;text-align:center"><button class="ghost" id="set-logout">ログアウト</button></div>`:""}
+    ${isLoggedIn?`<div style="margin-top:18px;text-align:center">
+      <button class="ghost" id="set-logout">ログアウト</button>
+      <button class="ghost" id="set-delete" style="color:#c0392b;margin-left:12px">アカウント削除</button>
+    </div>`:""}
     <div class="modal-actions"><button class="ghost" onclick="closeModal()">閉じる</button></div>`);
   const lo = document.getElementById("set-logout");
   if (lo) lo.onclick = logout;
+  const del = document.getElementById("set-delete");
+  if (del) del.onclick = async () => {
+    if (!confirm("本当にアカウントを削除しますか？\n登録した相手・記録・会員情報がすべて消え、元に戻せません。")) return;
+    await api.post("/api/account/delete", {});
+    location.reload();
+  };
   document.querySelectorAll(".theme-opt[data-theme]").forEach(el => el.onclick = () => {
     const theme = el.dataset.theme;
     localStorage.setItem("theme", theme);
