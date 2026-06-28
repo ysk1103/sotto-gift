@@ -90,7 +90,10 @@ function openSettings(){
         <div class="td">${isSubscribed?"広告なし・無制限・記録/写真OK":`広告あり・${freePeopleLimit}人まで・提案${freeVisible}件まで`}</div></div>
       <button class="ghost" id="sub-btn" style="margin:0">${isSubscribed?"無料に戻す":"プレミアムにする"}</button>
     </div>
+    ${isLoggedIn?`<div style="margin-top:18px;text-align:center"><button class="ghost" id="set-logout">ログアウト</button></div>`:""}
     <div class="modal-actions"><button class="ghost" onclick="closeModal()">閉じる</button></div>`);
+  const lo = document.getElementById("set-logout");
+  if (lo) lo.onclick = logout;
   document.querySelectorAll(".theme-opt[data-theme]").forEach(el => el.onclick = () => {
     const theme = el.dataset.theme;
     localStorage.setItem("theme", theme);
@@ -133,7 +136,36 @@ function budgetOptions(sel, isMax){
 }
 
 // ===== 起動 =====
-init();
+boot();
+// 起動時：ログインが必要かを確認。必要かつ未ログインならログイン画面、それ以外はアプリ起動。
+async function boot(){
+  let me;
+  try { me = await api.get("/api/auth/me"); } catch(e){ me = {required:false, authenticated:true}; }
+  if (me.required && !me.authenticated){ showLogin(me.google_client_id); return; }
+  isLoggedIn = !!me.authenticated;
+  init();
+}
+function showLogin(clientId){
+  document.getElementById("login-screen").classList.remove("hidden");
+  const render = () => {
+    if (window.google && google.accounts && google.accounts.id){
+      google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
+      google.accounts.id.renderButton(document.getElementById("gbtn"),
+        { theme:"filled_black", size:"large", text:"continue_with", shape:"pill", locale:"ja", width:260 });
+    } else { setTimeout(render, 200); }   // GISスクリプト読込待ち
+  };
+  render();
+}
+async function onGoogleCredential(resp){
+  const r = await api.post("/api/auth/google", { credential: resp.credential });
+  if (r && !r.detail){ location.reload(); }   // ログイン成功→再起動でアプリへ
+  else { alert("ログインに失敗しました。もう一度お試しください。"); }
+}
+async function logout(){
+  await api.post("/api/auth/logout", {});
+  location.reload();
+}
+let isLoggedIn = false;
 async function init(){
   document.querySelectorAll("[data-icon]").forEach(el => el.innerHTML = icon(el.dataset.icon, +el.dataset.size || 24));
   setupPWA();
