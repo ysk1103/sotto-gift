@@ -71,8 +71,8 @@ def _stripe():
 
 
 def _make_session(user: dict) -> str:
-    payload = {"sub": user["sub"], "email": user.get("email", ""), "name": user.get("name", ""),
-               "exp": int(time.time()) + 60 * 60 * 24 * _SESSION_DAYS}
+    # 最小限：Googleの不変ID(sub)だけ保持。名前・メールは保存しない。
+    payload = {"sub": user["sub"], "exp": int(time.time()) + 60 * 60 * 24 * _SESSION_DAYS}
     raw = base64.urlsafe_b64encode(_json.dumps(payload).encode()).decode().rstrip("=")
     sig = hmac.new(SESSION_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
     return raw + "." + sig
@@ -100,8 +100,7 @@ def _verify_google(credential: str) -> dict:
     from google.auth.transport import requests as g_requests
     info = id_token.verify_oauth2_token(credential, g_requests.Request(), GOOGLE_CLIENT_ID,
                                         clock_skew_in_seconds=10)
-    return {"sub": info["sub"], "email": info.get("email", ""),
-            "name": info.get("name", ""), "picture": info.get("picture", "")}
+    return {"sub": info["sub"]}   # 識別子のみ。メール・名前は保持しない
 
 
 def auth_ctx(request: Request):
@@ -131,7 +130,7 @@ def auth_google(body: GoogleIn):
     except Exception as e:
         print(f"[auth] Google検証失敗: {e}")
         raise HTTPException(401, "Googleログインに失敗しました")
-    resp = JSONResponse({"email": user["email"], "name": user["name"]})
+    resp = JSONResponse({"ok": True})
     resp.set_cookie("session", _make_session(user), httponly=True, secure=AUTH_REQUIRED,
                     samesite="lax", max_age=60 * 60 * 24 * _SESSION_DAYS, path="/")
     return resp
@@ -139,10 +138,8 @@ def auth_google(body: GoogleIn):
 
 @app.get("/api/auth/me")
 def auth_me(request: Request):
-    u = request.state.user
-    return {"authenticated": bool(u), "required": AUTH_REQUIRED,
-            "google_client_id": GOOGLE_CLIENT_ID,
-            "email": (u or {}).get("email", ""), "name": (u or {}).get("name", "")}
+    return {"authenticated": bool(request.state.user), "required": AUTH_REQUIRED,
+            "google_client_id": GOOGLE_CLIENT_ID}
 
 
 @app.post("/api/auth/logout")
@@ -166,7 +163,6 @@ def billing_checkout(request: Request):
         success_url=base + "?premium=1",
         cancel_url=base,
         client_reference_id=user["sub"],
-        customer_email=user.get("email") or None,
         subscription_data={"metadata": {"app_user": user["sub"]}},
         allow_promotion_codes=True,
     )
@@ -192,12 +188,13 @@ async def billing_webhook(request: Request):
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
     try:
-        event = _stripe().Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+        _stripe().Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)  # 署名検証
     except Exception as e:
         print(f"[billing] webhook署名NG: {e}")
         raise HTTPException(400, "invalid signature")
-    t = event["type"]
-    obj = event["data"]["object"]
+    event = _json.loads(payload)              # 以降は素のdictで安全に読む
+    t = event.get("type")
+    obj = (event.get("data") or {}).get("object") or {}
     if t == "checkout.session.completed":
         uid = obj.get("client_reference_id")
         if uid:
