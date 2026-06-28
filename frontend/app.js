@@ -160,13 +160,17 @@ boot();
 async function boot(){
   let me;
   try { me = await api.get("/api/auth/me"); } catch(e){ me = {required:false, authenticated:true}; }
-  if (me.required && !me.authenticated){ showLogin(me.google_client_id); return; }
+  if (me.required && !me.authenticated){ showLogin(me.google_client_id, me.line_enabled); return; }
   isLoggedIn = !!me.authenticated;
   authRequired = !!me.required;
   init();
 }
-function showLogin(clientId){
+function showLogin(clientId, lineEnabled){
   document.getElementById("login-screen").classList.remove("hidden");
+  if (lineEnabled){
+    document.getElementById("line-login").innerHTML =
+      `<a class="line-btn" href="/api/auth/line/login">LINEで続ける</a>`;
+  }
   const render = () => {
     if (window.google && google.accounts && google.accounts.id){
       google.accounts.id.initialize({ client_id: clientId, callback: onGoogleCredential });
