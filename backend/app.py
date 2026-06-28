@@ -341,6 +341,10 @@ def _build_inputs(req: SuggestRequest):
     )
     # 検索キーワードは「本人の明示的な好み」だけ。もらった履歴で検索を狭めない。
     keywords = req.keywords or (free + likes)
+    # 幼い年代は子ども向け商品が出るよう検索語を補う
+    _age_hint = {"赤ちゃん": "ベビー", "幼児": "キッズ", "小学生": "キッズ"}.get(age_band)
+    if _age_hint and _age_hint not in keywords:
+        keywords = keywords + [_age_hint]
     budget_min = max(2000, req.budget_min)                  # 下限は一律2,000円（それ未満は想定外）
     budget_max = max(budget_min, req.budget_max)
     intent = SearchIntent(keywords=keywords, budget_min=budget_min, budget_max=budget_max)
