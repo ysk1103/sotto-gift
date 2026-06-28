@@ -58,6 +58,17 @@ SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-secret-change-me")
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED") == "1"     # 本番=1。ローカルは未設定＝ログイン不要
 _SESSION_DAYS = 30
 
+# Stripe（課金）
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+
+
+def _stripe():
+    import stripe
+    stripe.api_key = STRIPE_SECRET_KEY
+    return stripe
+
 
 def _make_session(user: dict) -> str:
     payload = {"sub": user["sub"], "email": user.get("email", ""), "name": user.get("name", ""),
@@ -100,7 +111,9 @@ def auth_ctx(request: Request):
     request.state.user = user
     if AUTH_REQUIRED:
         p = request.url.path
-        if p.startswith("/api/") and not p.startswith("/api/auth/") and not user:
+        # /api/auth/* と Stripe Webhook は未ログインで通す（Webhookはセッション無しで来る）
+        if (p.startswith("/api/") and not p.startswith("/api/auth/")
+                and p != "/api/billing/webhook" and not user):
             raise HTTPException(401, "ログインが必要です")
 
 
@@ -137,6 +150,65 @@ def auth_logout():
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("session", path="/")
     return resp
+
+
+# ============================ 課金（Stripe） ============================
+@app.post("/api/billing/checkout")
+def billing_checkout(request: Request):
+    """プレミアム購読の決済ページを作成し、そのURLを返す（フロントがそこへ遷移）。"""
+    user = request.state.user
+    if not user:
+        raise HTTPException(401, "ログインが必要です")
+    base = str(request.base_url)
+    s = _stripe().checkout.Session.create(
+        mode="subscription",
+        line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+        success_url=base + "?premium=1",
+        cancel_url=base,
+        client_reference_id=user["sub"],
+        customer_email=user.get("email") or None,
+        subscription_data={"metadata": {"app_user": user["sub"]}},
+        allow_promotion_codes=True,
+    )
+    return {"url": s.url}
+
+
+@app.post("/api/billing/portal")
+def billing_portal(request: Request):
+    """購読の管理（解約・カード変更）ページURLを返す。"""
+    user = request.state.user
+    if not user:
+        raise HTTPException(401, "ログインが必要です")
+    cust = store.get_settings().get("stripe_customer_id")
+    if not cust:
+        raise HTTPException(400, "購読情報が見つかりません")
+    s = _stripe().billing_portal.Session.create(customer=cust, return_url=str(request.base_url))
+    return {"url": s.url}
+
+
+@app.post("/api/billing/webhook")
+async def billing_webhook(request: Request):
+    """Stripeからの支払い通知。署名検証し、会員状態を更新（有料状態の唯一の源）。"""
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    try:
+        event = _stripe().Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+    except Exception as e:
+        print(f"[billing] webhook署名NG: {e}")
+        raise HTTPException(400, "invalid signature")
+    t = event["type"]
+    obj = event["data"]["object"]
+    if t == "checkout.session.completed":
+        uid = obj.get("client_reference_id")
+        if uid:
+            store.set_subscription(uid, True, obj.get("customer"))
+    elif t in ("customer.subscription.updated", "customer.subscription.deleted"):
+        uid = (obj.get("metadata") or {}).get("app_user")
+        status = obj.get("status")
+        active = t != "customer.subscription.deleted" and status in ("active", "trialing", "past_due")
+        if uid:
+            store.set_subscription(uid, active, obj.get("customer"))
+    return {"ok": True}
 
 
 @app.middleware("http")
@@ -472,6 +544,8 @@ def get_settings():
 @app.post("/api/settings")
 def update_settings(s: SettingsIn):
     patch = {k: v for k, v in s.model_dump().items() if v is not None}
+    if AUTH_REQUIRED:
+        patch.pop("subscribed", None)   # 本番は会員状態をStripeのみが変更（無料解除の穴を封鎖）
     return store.update_settings(patch)
 
 
