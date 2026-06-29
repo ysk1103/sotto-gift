@@ -124,15 +124,39 @@
   <button data-view="cal"><span class="ico" data-icon="calendar"></span>カレンダー</button>
 </nav>
 
-<!-- ログイン画面（要ログイン時のみ表示） -->
+<!-- ランディング＆ログイン（未ログイン時に表示・公開ページ） -->
 <div id="login-screen" class="hidden">
-  <div class="login-card">
-    <div class="login-logo">そっとぎふと</div>
-    <div class="login-tag">そっと寄り添う、贈りもの選び</div>
-    <p class="login-msg">続けるにはログインしてください</p>
-    <div id="gbtn"></div>
-    <div id="line-login"></div>
-    <p class="login-note">あなたの登録データはあなただけのものになります。</p>
+  <div class="lp">
+    <header class="lp-hero">
+      <div class="login-logo">そっとぎふと</div>
+      <div class="login-tag">そっと寄り添う、贈りもの選び</div>
+      <p class="lp-lead">大切な人へのプレゼントを、迷わず・確信を持って。<br>実在の商品から「この人に合う」を3〜5件、<b>理由つき</b>で提案します。</p>
+      <div class="lp-cta">
+        <div id="gbtn"></div>
+        <div id="line-login"></div>
+        <p class="login-note">無料ではじめられます／登録データはあなただけのもの</p>
+      </div>
+    </header>
+
+    <section class="lp-features">
+      <div class="lp-card"><span class="lp-ic" data-icon="gift" data-size="26"></span>
+        <div class="lp-t">ぴったりの提案</div>
+        <div class="lp-d">関係・年代・好みを選ぶだけ。実在の商品から3〜5件を、なぜ合うかの理由つきで。</div></div>
+      <div class="lp-card"><span class="lp-ic" data-icon="heart" data-size="26"></span>
+        <div class="lp-t">手紙の下書き</div>
+        <div class="lp-d">気持ちを言葉に。伝えたいことを入れるだけで、温かい手紙を下書きします。</div></div>
+      <div class="lp-card"><span class="lp-ic" data-icon="palette" data-size="26"></span>
+        <div class="lp-t">手作りの相談</div>
+        <div class="lp-d">「何を作る？」から一緒に。材料・手順・成功のコツまで提案します。</div></div>
+      <div class="lp-card"><span class="lp-ic" data-icon="calendar" data-size="26"></span>
+        <div class="lp-t">忘れないカレンダー</div>
+        <div class="lp-d">誕生日・記念日・行事をまとめて管理。近づいたらそっとお知らせ。</div></div>
+    </section>
+
+    <section class="lp-pitch">
+      <p>迷う時間を、贈る楽しみに。<br><span class="muted">無料で使えます（広告あり）。広告なし・無制限はプレミアム 月¥480。</span></p>
+    </section>
+
     <div class="legal-links"><a href="/terms.html">利用規約</a>・<a href="/privacy.html">プライバシー</a>・<a href="/tokushoho.html">特商法表記</a></div>
   </div>
 </div>
