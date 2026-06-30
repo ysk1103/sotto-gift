@@ -97,7 +97,7 @@ function openSettings(){
         <div class="td">${isSubscribed?"広告なし・無制限・記録/写真・完成イメージOK":`広告あり・${freePeopleLimit}人まで・提案${freeVisible}件まで`}</div></div>
       ${authRequired
         ? (isAndroidApp
-            ? `<span class="td" style="text-align:right;max-width:120px">${isSubscribed?"プレミアム会員":"プレミアムはWeb版で"}</span>`
+            ? `<span class="td" style="text-align:right;max-width:120px">${isSubscribed?"プレミアム会員":"無料会員"}</span>`
             : (isSubscribed
                 ? `<button class="ghost" id="sub-manage" style="margin:0">購読を管理</button>`
                 : `<button class="premium-btn" id="sub-go" style="margin:0">${icon("sparkle",15)}プレミアム（月¥480）</button>`))
@@ -154,7 +154,7 @@ function openSettings(){
 function goPremium(){
   if (!authRequired){ subscribe().then(()=>closeModal()); return; }   // ローカル開発
   if (isAndroidApp){
-    alert("プレミアムのご登録は、ブラウザ（Chrome等）で sotto-gift.onrender.com を開いて行ってください。アプリ版では登録できません。");
+    alert("申し訳ありません。この機能はこの環境ではご利用いただけません。");
     return;
   }
   billingCheckout();
@@ -392,7 +392,7 @@ function openUpsell(msg){
       <li>あげた／もらったを写真付きで記録</li>
       <li>広告なし</li>
     </ul>
-    ${isAndroidApp?`<p class="sub" style="text-align:center;margin:4px 0 0">プレミアムのご登録はブラウザ版（Chrome等）からお願いします。</p>`:""}
+    ${isAndroidApp?`<p class="sub" style="text-align:center;margin:4px 0 0">この機能はプレミアム会員向けです。</p>`:""}
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">閉じる</button>
       ${isAndroidApp?"":`<button class="primary" style="margin:0" id="up-go">プレミアムにする</button>`}
