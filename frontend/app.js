@@ -196,6 +196,9 @@ function showLogin(clientId, lineEnabled){
   document.getElementById("login-screen").classList.remove("hidden");
   // LP内のアイコンを描画（init前に表示されるため個別に）
   document.querySelectorAll("#login-screen [data-icon]").forEach(el => el.innerHTML = icon(el.dataset.icon, +el.dataset.size || 24));
+  // 最後の「無料ではじめる」→ 先頭のログインボタンへスクロール
+  const lpStart = document.getElementById("lp-start");
+  if (lpStart) lpStart.onclick = () => document.getElementById("login-screen").scrollTo({ top: 0, behavior: "smooth" });
   if (lineEnabled){
     document.getElementById("line-login").innerHTML =
       `<a class="line-btn" href="/api/auth/line/login">LINEで続ける</a>`;
