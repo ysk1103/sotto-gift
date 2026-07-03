@@ -54,12 +54,17 @@ const api = {
   del: (u) => fetch(u, {method:"DELETE"}).then(r => r.json()),
 };
 
-// Google Play(TWA)で起動したか。Playアプリ内ではアプリ内課金規約に抵触するため購入導線を出さない。
+// ネイティブアプリ(Google Play TWA / iOS Expoアプリ)内かを判定。
+// ストアのアプリ内課金規約に抵触するため、アプリ内では外部決済(Stripe)の購入導線を出さない。
 let isAndroidApp = false;
 try {
   if (document.referrer && document.referrer.indexOf("android-app://") === 0) localStorage.setItem("isTWA", "1");
   isAndroidApp = localStorage.getItem("isTWA") === "1";
+  // iOSアプリ(WebView)は独自UAマーカーで判定 → 同じく購入導線を隠す
+  if (/sottogiftiOS/.test(navigator.userAgent)) isAndroidApp = true;
 } catch (e) {}
+// ネイティブアプリ(iOS)なら、リマインドをネイティブのローカル通知にも橋渡しする
+const isNativeBridge = typeof window !== "undefined" && !!window.ReactNativeWebView;
 
 // ===== テーマ（案B=light / 案D=dark） =====
 function applyTheme(t){ document.body.classList.toggle("theme-dark", t === "dark"); }
@@ -408,6 +413,17 @@ function openUpsell(msg){
 async function loadReminders(){
   const box = document.getElementById("reminders");
   const list = await api.get("/api/reminders");
+  // iOSネイティブアプリなら、先の予定をローカル通知として予約させる（本物のネイティブ機能）
+  if (isNativeBridge){
+    try {
+      const now = new Date();
+      const payload = (list || []).filter(r => r.days > 0).map(r => ({
+        title: "そっとぎふと", body: r.message,
+        date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + r.days, 9, 0, 0).toISOString(),
+      }));
+      window.ReactNativeWebView.postMessage("reminders:" + JSON.stringify(payload));
+    } catch (e) {}
+  }
   if (!list.length){ box.innerHTML = ""; return; }
   box.innerHTML = list.map(r => {
     const person = r.person_id ? people.find(p => p.id === r.person_id) : null;
