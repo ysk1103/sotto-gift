@@ -75,6 +75,10 @@ def _stripe():
 LINE_CHANNEL_ID = os.getenv("LINE_CHANNEL_ID", "")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 
+# iOSネイティブ（Expoアプリ）用：Appleサインイン／ネイティブGoogle
+APPLE_BUNDLE_ID = os.getenv("APPLE_BUNDLE_ID", "com.sottogift.app")
+GOOGLE_CLIENT_ID_IOS = os.getenv("GOOGLE_CLIENT_ID_IOS", "")  # iOS用OAuthクライアントID
+
 
 def _make_session(user: dict) -> str:
     # 最小限：Googleの不変ID(sub)だけ保持。名前・メールは保存しない。
@@ -107,6 +111,35 @@ def _verify_google(credential: str) -> dict:
     info = id_token.verify_oauth2_token(credential, g_requests.Request(), GOOGLE_CLIENT_ID,
                                         clock_skew_in_seconds=10)
     return {"sub": info["sub"]}   # 識別子のみ。メール・名前は保持しない
+
+
+def _verify_google_native(credential: str) -> dict:
+    """iOSネイティブGoogle：Web用とiOS用のどちらのaudも許可して検証。subはWebと共通。"""
+    from google.oauth2 import id_token
+    from google.auth.transport import requests as g_requests
+    info = id_token.verify_oauth2_token(credential, g_requests.Request(),
+                                        clock_skew_in_seconds=10)
+    auds = {a for a in (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_ID_IOS) if a}
+    if info.get("aud") not in auds:
+        raise ValueError("aud mismatch")
+    if info.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+        raise ValueError("iss mismatch")
+    return {"sub": info["sub"]}
+
+
+_APPLE_JWK = None  # PyJWKClientはキャッシュを持つので使い回す
+
+
+def _verify_apple(identity_token: str) -> str:
+    """Appleサインインのidentity_tokenを検証し、不変のsubを返す。"""
+    import jwt  # PyJWT[crypto]
+    global _APPLE_JWK
+    if _APPLE_JWK is None:
+        _APPLE_JWK = jwt.PyJWKClient("https://appleid.apple.com/auth/keys")
+    key = _APPLE_JWK.get_signing_key_from_jwt(identity_token).key
+    claims = jwt.decode(identity_token, key, algorithms=["RS256"],
+                        audience=APPLE_BUNDLE_ID, issuer="https://appleid.apple.com")
+    return claims["sub"]
 
 
 def auth_ctx(request: Request):
@@ -188,6 +221,27 @@ def line_callback(request: Request, code: str = "", state: str = ""):
                     secure=AUTH_REQUIRED, samesite="lax",
                     max_age=60 * 60 * 24 * _SESSION_DAYS, path="/")
     resp.delete_cookie("line_state", path="/")
+    return resp
+
+
+# ---- iOSネイティブアプリ用：ネイティブで取得したトークンでセッションを張る ----
+# アプリはApple/Googleサインインをネイティブで行い、得たid_tokenでこのURLをWebViewで開く。
+# Cookieが張られて "/" へリダイレクトされ、以後Webはログイン済みで動く。
+@app.get("/api/auth/native")
+def auth_native(provider: str = "", id_token: str = ""):
+    try:
+        if provider == "apple":
+            sub = "apple:" + _verify_apple(id_token)
+        elif provider == "google":
+            sub = _verify_google_native(id_token)["sub"]   # subはWeb版のGoogleと共通
+        else:
+            raise ValueError("unknown provider")
+    except Exception as e:
+        print(f"[auth] native({provider})失敗: {e}")
+        raise HTTPException(401, "ログインに失敗しました")
+    resp = RedirectResponse("/", status_code=302)
+    resp.set_cookie("session", _make_session({"sub": sub}), httponly=True, secure=AUTH_REQUIRED,
+                    samesite="lax", max_age=60 * 60 * 24 * _SESSION_DAYS, path="/")
     return resp
 
 
