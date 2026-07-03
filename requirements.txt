@@ -5,3 +5,4 @@ psycopg[binary]
 google-auth
 requests
 stripe
+pyjwt[crypto]
