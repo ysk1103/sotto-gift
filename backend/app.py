@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import base64
+import contextvars
 import hashlib
 import hmac
 import json as _json
@@ -59,6 +60,16 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-secret-change-me")
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED") == "1"     # 本番=1。ローカルは未設定＝ログイン不要
 _SESSION_DAYS = 30
+
+# iOSアプリ(App Store)ではアプリ内課金以外の有料導線を持てない(App Store 3.1.1)。
+# そこでネイティブiOSアプリからのアクセスは当面すべて解放し、無料アプリとして提供する。
+# 判定はWebViewが付与するUAマーカー(applicationNameForUserAgent="sottogiftiOS")。
+_native_ios = contextvars.ContextVar("native_ios", default=False)
+
+
+def _sub() -> bool:
+    """実効の有料状態。iOSアプリからは常にTrue扱い（全機能を無料開放）。"""
+    return bool(store.get_settings()["subscribed"]) or _native_ios.get()
 
 # Stripe（課金）
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
@@ -146,6 +157,7 @@ def auth_ctx(request: Request):
     """全APIの前に実行：セッションからユーザーを特定し、保存層をその人に切替＋必要なら拒否。"""
     user = _read_session(request)
     store.set_current_user(user["sub"] if user else None)
+    _native_ios.set("sottogiftiOS" in request.headers.get("user-agent", ""))
     request.state.user = user
     if AUTH_REQUIRED:
         p = request.url.path
@@ -420,7 +432,7 @@ FREE_DAILY_LIMIT = 5             # 無料の1日提案回数（コスト防衛�
 
 @app.post("/api/suggest")
 def suggest(req: SuggestRequest):
-    subscribed = store.get_settings()["subscribed"]
+    subscribed = _sub()
     today = date.today().isoformat()
     # 無料は1日上限。超えたら ②③④ を一切回さず即返す（＝API費用ゼロ）
     if not subscribed:
@@ -523,7 +535,7 @@ class HandmadeImageIn(BaseModel):
 
 @app.post("/api/handmade/image")
 def handmade_image(req: HandmadeImageIn):
-    if not store.get_settings()["subscribed"]:
+    if not _sub():
         raise HTTPException(402, "完成イメージはプレミアム会員の機能です")
     _GENIMG_DIR.mkdir(parents=True, exist_ok=True)
     key = hashlib.md5((req.title + "|" + "|".join(req.materials)).encode("utf-8")).hexdigest()[:16]
@@ -592,7 +604,7 @@ def save_person(p: PersonIn):
     data = p.model_dump()
     # 無料は2人まで（新規登録のときだけ判定。既存の編集は通す）
     is_new = not data.get("id")
-    if is_new and not store.get_settings()["subscribed"]:
+    if is_new and not _sub():
         if len(store.list_people()) >= FREE_PEOPLE_LIMIT:
             raise HTTPException(402, f"無料会員は{FREE_PEOPLE_LIMIT}人まで。プレミアムで無制限になります")
     data["gender"] = resolve_gender(data["relation"], data.get("gender", ""))  # 関係から自動補完
@@ -636,7 +648,7 @@ def get_events(person_id: str | None = None):
 
 @app.post("/api/events")
 def save_event(e: EventIn):
-    if not store.get_settings()["subscribed"]:                 # 記録は有料会員のみ
+    if not _sub():                 # 記録は有料会員のみ（iOSアプリは開放）
         raise HTTPException(402, "プレミアム会員限定の機能です")
     if e.direction not in ("gave", "received"):
         raise HTTPException(400, "direction は gave か received")
@@ -663,7 +675,8 @@ class SettingsIn(BaseModel):
 @app.get("/api/settings")
 def get_settings():
     s = store.get_settings()
-    return {**s, "free_people_limit": FREE_PEOPLE_LIMIT, "free_suggest_visible": FREE_SUGGEST_VISIBLE}
+    return {**s, "subscribed": _sub(),   # iOSアプリからは有料相当（全機能開放）
+            "free_people_limit": FREE_PEOPLE_LIMIT, "free_suggest_visible": FREE_SUGGEST_VISIBLE}
 
 
 @app.post("/api/settings")

@@ -63,8 +63,16 @@ try {
   // iOSアプリ(WebView)は独自UAマーカーで判定 → 同じく購入導線を隠す
   if (/sottogiftiOS/.test(navigator.userAgent)) isAndroidApp = true;
 } catch (e) {}
+// iOSアプリ判定（App Store審査対応：Web内のGoogle/LINEログインや料金表示を出さず、
+// ログインはネイティブのAppleサインインに一本化。有料はサーバ側で開放＝無料アプリ扱い）。
+const isIosApp = typeof navigator !== "undefined" && /sottogiftiOS/.test(navigator.userAgent);
 // ネイティブアプリ(iOS)なら、リマインドをネイティブのローカル通知にも橋渡しする
 const isNativeBridge = typeof window !== "undefined" && !!window.ReactNativeWebView;
+// ネイティブ(iOS)へ状態を明示的に通知する。DOMポーリングだと boot 前に誤判定するため、
+// 「ログインが必要(needlogin)」「アプリ表示OK(ok)」を確定してから送る。
+function nativePost(msg){
+  try { if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(msg); } catch (e) {}
+}
 
 // ===== テーマ（案B=light / 案D=dark） =====
 function applyTheme(t){ document.body.classList.toggle("theme-dark", t === "dark"); }
@@ -95,7 +103,7 @@ function openSettings(){
       <div><select id="set-bmax">${budgetOptions(defaultBudget.max||8000,true)}</select></div>
     </div>
 
-    <label style="margin-top:16px">会員</label>
+    ${isIosApp ? "" : `<label style="margin-top:16px">会員</label>
     <div class="theme-opt" id="sub-row">
       <div class="sw" style="background:linear-gradient(135deg,#cda46a,#b58a48)"></div>
       <div style="flex:1"><div class="tn">${isSubscribed?"プレミアム会員":"無料会員"}</div>
@@ -107,7 +115,7 @@ function openSettings(){
                 ? `<button class="ghost" id="sub-manage" style="margin:0">購読を管理</button>`
                 : `<button class="premium-btn" id="sub-go" style="margin:0">${icon("sparkle",15)}プレミアム（月¥480）</button>`))
         : `<button class="ghost" id="sub-btn" style="margin:0">${isSubscribed?"無料に戻す":"プレミアムにする"}</button>`}
-    </div>
+    </div>`}
     ${isLoggedIn?`<div style="margin-top:18px;text-align:center">
       <button class="ghost" id="set-logout">ログアウト</button>
       <button class="ghost" id="set-delete" style="color:#c0392b;margin-left:12px">アカウント削除</button>
@@ -192,9 +200,10 @@ boot();
 async function boot(){
   let me;
   try { me = await api.get("/api/auth/me"); } catch(e){ me = {required:false, authenticated:true}; }
-  if (me.required && !me.authenticated){ showLogin(me.google_client_id, me.line_enabled); return; }
+  if (me.required && !me.authenticated){ nativePost("needlogin"); showLogin(me.google_client_id, me.line_enabled); return; }
   isLoggedIn = !!me.authenticated;
   authRequired = !!me.required;
+  nativePost("ok");     // ネイティブへ「ログイン済み・アプリ表示OK」を確定通知
   init();
 }
 function showLogin(clientId, lineEnabled){
@@ -204,6 +213,18 @@ function showLogin(clientId, lineEnabled){
   // 最後の「無料ではじめる」→ 先頭のログインボタンへスクロール
   const lpStart = document.getElementById("lp-start");
   if (lpStart) lpStart.onclick = () => document.getElementById("login-screen").scrollTo({ top: 0, behavior: "smooth" });
+  // iOSアプリ内：ログインはネイティブのAppleサインイン（画面を覆うオーバーレイ）に一本化。
+  // Web側のGoogle/LINEボタンは出さない（外部ブラウザ誘導＝App Store 4.8/ガイドライン4を回避）。
+  // 料金表など有料の案内もアプリ内では隠す（3.1.1回避）。
+  if (isIosApp){
+    ["gbtn", "line-login"].forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+    document.querySelectorAll("#login-screen .price-row").forEach(el => {
+      const sec = el.closest(".lp-sec"); if (sec) sec.remove();
+    });
+    const note = document.querySelector("#login-screen .login-note");
+    if (note) note.textContent = "Appleサインインではじめられます";
+    return;
+  }
   if (lineEnabled){
     document.getElementById("line-login").innerHTML =
       `<a class="line-btn" href="/api/auth/line/login">LINEで続ける</a>`;
