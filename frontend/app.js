@@ -335,6 +335,7 @@ function setupPWA(){
 async function loadSettings(){
   const s = await api.get("/api/settings");
   isSubscribed = !!s.subscribed;
+  if (isIosApp) isSubscribed = true;   // iOSアプリは全機能を無料開放（有料/PREMIUM表示を一切出さない）
   freeVisible = s.free_suggest_visible ?? 2;
   freePeopleLimit = s.free_people_limit ?? 2;
   narrateTone = s.tone || "warm";
@@ -725,7 +726,7 @@ function makeDetailModal(i, backFn){
     <div class="note" style="display:flex;align-items:flex-start;gap:7px">${icon("bulb",16)}<span>${esc(i.tip)}</span></div>`:""}
     <label style="margin-top:16px">完成イメージ</label>
     ${isSubscribed
-      ? `<button class="premium-btn" id="hm-img-btn" style="width:100%">${icon("sparkle",16)}完成イメージを見る<span class="pchip">PREMIUM</span></button>`
+      ? `<button class="premium-btn" id="hm-img-btn" style="width:100%">${icon("sparkle",16)}完成イメージを見る${isIosApp?"":`<span class="pchip">PREMIUM</span>`}</button>`
       : `<button class="ghost" id="hm-img-up" style="width:100%;margin:0">完成イメージを見る（プレミアム）</button>`}
     <div id="hm-img-area"></div>
     <div class="modal-actions">
