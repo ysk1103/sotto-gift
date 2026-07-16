@@ -103,19 +103,20 @@ function openSettings(){
       <div><select id="set-bmax">${budgetOptions(defaultBudget.max||8000,true)}</select></div>
     </div>
 
-    ${isIosApp ? "" : `<label style="margin-top:16px">会員</label>
+    <label style="margin-top:16px">会員</label>
     <div class="theme-opt" id="sub-row">
       <div class="sw" style="background:linear-gradient(135deg,#cda46a,#b58a48)"></div>
       <div style="flex:1"><div class="tn">${isSubscribed?"プレミアム会員":"無料会員"}</div>
         <div class="td">${isSubscribed?"広告なし・無制限・記録/写真・完成イメージOK":`広告あり・${freePeopleLimit}人まで・提案${freeVisible}件まで`}</div></div>
       ${authRequired
-        ? (isAndroidApp
+        ? ((isAndroidApp && !isIosApp)
             ? `<span class="td" style="text-align:right;max-width:120px">${isSubscribed?"プレミアム会員":"無料会員"}</span>`
             : (isSubscribed
                 ? `<button class="ghost" id="sub-manage" style="margin:0">購読を管理</button>`
                 : `<button class="premium-btn" id="sub-go" style="margin:0">${icon("sparkle",15)}プレミアム（月¥480）</button>`))
         : `<button class="ghost" id="sub-btn" style="margin:0">${isSubscribed?"無料に戻す":"プレミアムにする"}</button>`}
-    </div>`}
+    </div>
+    ${(isIosApp && !isSubscribed)?`<div style="text-align:center;margin-top:8px"><button class="ghost" id="sub-restore" style="margin:0">購入を復元</button></div>`:""}
     ${isLoggedIn?`<div style="margin-top:18px;text-align:center">
       <button class="ghost" id="set-logout">ログアウト</button>
       <button class="ghost" id="set-delete" style="color:#c0392b;margin-left:12px">アカウント削除</button>
@@ -161,11 +162,14 @@ function openSettings(){
   const subGo = document.getElementById("sub-go");        // 本番Web：プレミアム購入
   if (subGo) subGo.onclick = goPremium;
   const subManage = document.getElementById("sub-manage"); // 本番：購読管理（解約等）
-  if (subManage) subManage.onclick = billingManage;
+  if (subManage) subManage.onclick = isIosApp ? (() => nativePost("manage")) : billingManage;
+  const subRestore = document.getElementById("sub-restore"); // iOS：購入を復元（App Store要件）
+  if (subRestore) subRestore.onclick = () => nativePost("restore");
 }
-// 課金の統一入口：ローカル=トグル／Androidアプリ=案内のみ／Web=Stripe決済
+// 課金の統一入口：ローカル=トグル／iOSアプリ=アプリ内課金(ネイティブ)／Androidアプリ=案内のみ／Web=Stripe決済
 function goPremium(){
   if (!authRequired){ subscribe().then(()=>closeModal()); return; }   // ローカル開発
+  if (isIosApp){ nativePost("buy"); closeModal(); return; }           // ネイティブがStoreKit購入を起動
   if (isAndroidApp){
     alert("申し訳ありません。この機能はこの環境ではご利用いただけません。");
     return;
@@ -204,6 +208,7 @@ async function boot(){
   isLoggedIn = !!me.authenticated;
   authRequired = !!me.required;
   nativePost("ok");     // ネイティブへ「ログイン済み・アプリ表示OK」を確定通知
+  if (isIosApp && me.sub) nativePost("user:" + me.sub);   // iOS課金(RevenueCat)のユーザーID連携
   init();
 }
 function showLogin(clientId, lineEnabled){
@@ -334,8 +339,7 @@ function setupPWA(){
 // ===== 会員状態・広告 =====
 async function loadSettings(){
   const s = await api.get("/api/settings");
-  isSubscribed = !!s.subscribed;
-  if (isIosApp) isSubscribed = true;   // iOSアプリは全機能を無料開放（有料/PREMIUM表示を一切出さない）
+  isSubscribed = !!s.subscribed;   // iOSアプリもサーバ判定（RevenueCatのアプリ内課金）に従う
   freeVisible = s.free_suggest_visible ?? 2;
   freePeopleLimit = s.free_people_limit ?? 2;
   narrateTone = s.tone || "warm";
@@ -422,13 +426,15 @@ function openUpsell(msg){
       <li>あげた／もらったを写真付きで記録</li>
       <li>広告なし</li>
     </ul>
-    ${isAndroidApp?`<p class="sub" style="text-align:center;margin:4px 0 0">この機能はプレミアム会員向けです。</p>`:""}
+    ${(isAndroidApp && !isIosApp)?`<p class="sub" style="text-align:center;margin:4px 0 0">この機能はプレミアム会員向けです。</p>`:""}
+    ${isIosApp?`<p class="sub" style="text-align:center;margin:4px 0 0">月額¥480・いつでも解約できます<br>
+      <a href="/terms.html" target="_blank" rel="noopener">利用規約</a> ・ <a href="/privacy.html" target="_blank" rel="noopener">プライバシーポリシー</a></p>`:""}
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">閉じる</button>
-      ${isAndroidApp?"":`<button class="primary" style="margin:0" id="up-go">プレミアムにする</button>`}
+      ${(isAndroidApp && !isIosApp)?"":`<button class="primary" style="margin:0" id="up-go">プレミアム（月¥480）</button>`}
     </div>`);
   const up = document.getElementById("up-go");
-  if (up) up.onclick = goPremium;   // Web=Stripe / ローカル=トグル（本番の旧トグル無効化バグも解消）
+  if (up) up.onclick = goPremium;   // Web=Stripe / iOS=アプリ内課金 / ローカル=トグル
 }
 
 // ===== 🔔 リマインド =====
@@ -726,7 +732,7 @@ function makeDetailModal(i, backFn){
     <div class="note" style="display:flex;align-items:flex-start;gap:7px">${icon("bulb",16)}<span>${esc(i.tip)}</span></div>`:""}
     <label style="margin-top:16px">完成イメージ</label>
     ${isSubscribed
-      ? `<button class="premium-btn" id="hm-img-btn" style="width:100%">${icon("sparkle",16)}完成イメージを見る${isIosApp?"":`<span class="pchip">PREMIUM</span>`}</button>`
+      ? `<button class="premium-btn" id="hm-img-btn" style="width:100%">${icon("sparkle",16)}完成イメージを見る<span class="pchip">PREMIUM</span></button>`
       : `<button class="ghost" id="hm-img-up" style="width:100%;margin:0">完成イメージを見る（プレミアム）</button>`}
     <div id="hm-img-area"></div>
     <div class="modal-actions">
