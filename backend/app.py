@@ -61,15 +61,53 @@ SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-secret-change-me")
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED") == "1"     # 本番=1。ローカルは未設定＝ログイン不要
 _SESSION_DAYS = 30
 
-# iOSアプリ(App Store)ではアプリ内課金以外の有料導線を持てない(App Store 3.1.1)。
-# そこでネイティブiOSアプリからのアクセスは当面すべて解放し、無料アプリとして提供する。
+# iOSアプリ(App Store)の課金はアプリ内課金(IAP)のみ許可(App Store 3.1.1)。
+# iOSアプリはRevenueCat経由の月額サブスク。サーバはRevenueCat REST APIで
+# 「このユーザー(sub)がpremium資格を持つか」を照会して有料状態を判定する。
 # 判定はWebViewが付与するUAマーカー(applicationNameForUserAgent="sottogiftiOS")。
 _native_ios = contextvars.ContextVar("native_ios", default=False)
+_current_sub = contextvars.ContextVar("current_sub", default="")
+
+# RevenueCat（iOSアプリ内課金）
+REVENUECAT_SECRET_KEY = os.getenv("REVENUECAT_SECRET_KEY", "")
+_RC_CACHE: dict[str, tuple[bool, float]] = {}   # sub -> (premium?, 期限epoch)
+_RC_TTL = 600                                    # 10分キャッシュ（購入直後はrefreshで無効化）
+
+
+def _rc_premium(sub: str) -> bool:
+    """RevenueCatにこのユーザーのpremium資格を照会（キャッシュつき）。"""
+    if not REVENUECAT_SECRET_KEY or not sub:
+        return False
+    now = time.time()
+    hit = _RC_CACHE.get(sub)
+    if hit and hit[1] > now:
+        return hit[0]
+    ok = False
+    try:
+        import requests as rq
+        r = rq.get("https://api.revenuecat.com/v1/subscribers/" + urllib.parse.quote(sub, safe=""),
+                   headers={"Authorization": f"Bearer {REVENUECAT_SECRET_KEY}"}, timeout=8)
+        ent = (r.json().get("subscriber", {}).get("entitlements", {}) or {}).get("premium")
+        if ent:
+            exp = ent.get("expires_date")
+            if not exp:                       # 期限なし＝買い切り等
+                ok = True
+            else:
+                from datetime import datetime, timezone
+                ok = datetime.fromisoformat(exp.replace("Z", "+00:00")) > datetime.now(timezone.utc)
+    except Exception as e:
+        print(f"[billing] RevenueCat照会失敗: {e}")
+    _RC_CACHE[sub] = (ok, now + _RC_TTL)
+    return ok
 
 
 def _sub() -> bool:
-    """実効の有料状態。iOSアプリからは常にTrue扱い（全機能を無料開放）。"""
-    return bool(store.get_settings()["subscribed"]) or _native_ios.get()
+    """実効の有料状態。Web=Stripe(settings.subscribed)、iOSアプリ=RevenueCat照会。"""
+    if bool(store.get_settings()["subscribed"]):
+        return True
+    if _native_ios.get():
+        return _rc_premium(_current_sub.get())
+    return False
 
 # Stripe（課金）
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
@@ -158,6 +196,7 @@ def auth_ctx(request: Request):
     user = _read_session(request)
     store.set_current_user(user["sub"] if user else None)
     _native_ios.set("sottogiftiOS" in request.headers.get("user-agent", ""))
+    _current_sub.set(user["sub"] if user else "")
     request.state.user = user
     if AUTH_REQUIRED:
         p = request.url.path
@@ -190,7 +229,16 @@ def auth_google(body: GoogleIn):
 @app.get("/api/auth/me")
 def auth_me(request: Request):
     return {"authenticated": bool(request.state.user), "required": AUTH_REQUIRED,
-            "google_client_id": GOOGLE_CLIENT_ID, "line_enabled": bool(LINE_CHANNEL_ID)}
+            "google_client_id": GOOGLE_CLIENT_ID, "line_enabled": bool(LINE_CHANNEL_ID),
+            # iOSアプリがRevenueCatのappUserIDに使う（ログイン済みのときだけ）
+            "sub": (request.state.user or {}).get("sub", "")}
+
+
+# iOSアプリ：購入/復元の直後にRevenueCatキャッシュを消して最新の会員状態で"/"へ戻る
+@app.get("/api/billing/ios/refresh")
+def billing_ios_refresh():
+    _RC_CACHE.pop(_current_sub.get(), None)
+    return RedirectResponse("/")
 
 
 # ---- LINEログイン（認可コードフロー）----
