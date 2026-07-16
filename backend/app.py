@@ -191,8 +191,13 @@ def _verify_apple(identity_token: str) -> str:
     return claims["sub"]
 
 
-def auth_ctx(request: Request):
-    """全APIの前に実行：セッションからユーザーを特定し、保存層をその人に切替＋必要なら拒否。"""
+async def auth_ctx(request: Request):
+    """全APIの前に実行：セッションからユーザーを特定し、保存層をその人に切替＋必要なら拒否。
+
+    ⚠️ 必ず async def にすること。同期(def)だとFastAPIがスレッドプールの
+    「コピーされたコンテキスト」で実行するため、ここで set した contextvar
+    (現在ユーザー等)がエンドポイント本体に伝わらず、全ユーザーが共有領域
+    "main" に読み書きしてしまう（実際に起きたデータ混在バグの原因）。"""
     user = _read_session(request)
     store.set_current_user(user["sub"] if user else None)
     _native_ios.set("sottogiftiOS" in request.headers.get("user-agent", ""))
